@@ -1,18 +1,23 @@
-import { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
-import { PlatformPressable } from '@react-navigation/elements';
+// components/HapticTab.tsx
+import React from 'react';
+import { Pressable } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { Feather } from '@expo/vector-icons';
 
-export function HapticTab(props: BottomTabBarButtonProps) {
+interface HapticTabProps {
+  iconName: keyof typeof Feather.glyphMap;
+  color: string;
+  size?: number;
+}
+
+export function HapticTab({ iconName, color, size = 24 }: HapticTabProps) {
+  const handlePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
   return (
-    <PlatformPressable
-      {...props}
-      onPressIn={(ev) => {
-        if (process.env.EXPO_OS === 'ios') {
-          // Add a soft haptic feedback when pressing down on the tabs.
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }
-        props.onPressIn?.(ev);
-      }}
-    />
+    <Pressable onPress={handlePress}>
+      <Feather name={iconName} size={size} color={color} />
+    </Pressable>
   );
 }
