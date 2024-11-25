@@ -1,74 +1,189 @@
-import { Image, StyleSheet, Platform } from 'react-native';
-
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+// app/(tabs)/index.tsx
+import { StyleSheet, Pressable, ScrollView } from "react-native";
+import { Link } from "expo-router";
+import { FlashList } from "@shopify/flash-list";
+import { ThemedView } from "../../components/ThemedView";
+import { ThemedText } from "../../components/ThemedText";
+import { HelloWave } from "../../components/HelloWave";
+import { useAppStore } from "../../hooks/useAppStore";
+import { Session } from "../../types";
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
+  const user = useAppStore((state) => state.user);
+
+  // Placeholder recent sessions - replace with actual data later
+  const recentSessions: Session[] = [];
+
+  const renderWelcomeSection = () => (
+    <ThemedView style={styles.welcomeSection}>
+      <HelloWave />
+      <ThemedText style={styles.welcomeText}>
+        Welcome{user?.name ? `, ${user.name}` : ""}!
+      </ThemedText>
+      <ThemedText style={styles.subtitle}>
+        Ready to practice your language skills?
+      </ThemedText>
+      <Link href="/(tabs)/scenarios" asChild>
+        <Pressable>
+          <ThemedView style={styles.startButton}>
+            <ThemedText style={styles.startButtonText}>
+              Start New Conversation
+            </ThemedText>
+          </ThemedView>
+        </Pressable>
+      </Link>
+    </ThemedView>
+  );
+
+  const renderQuickStats = () => (
+    <ThemedView style={styles.statsContainer}>
+      <ThemedView style={styles.statCard}>
+        <ThemedText style={styles.statNumber}>0</ThemedText>
+        <ThemedText style={styles.statLabel}>Conversations</ThemedText>
+      </ThemedView>
+      <ThemedView style={styles.statCard}>
+        <ThemedText style={styles.statNumber}>0</ThemedText>
+        <ThemedText style={styles.statLabel}>Minutes Practiced</ThemedText>
+      </ThemedView>
+      <ThemedView style={styles.statCard}>
+        <ThemedText style={styles.statNumber}>0</ThemedText>
+        <ThemedText style={styles.statLabel}>Languages</ThemedText>
+      </ThemedView>
+    </ThemedView>
+  );
+
+  const renderRecentSection = () => (
+    <ThemedView style={styles.recentSection}>
+      <ThemedText style={styles.sectionTitle}>Recent Conversations</ThemedText>
+      {recentSessions.length > 0 ? (
+        <FlashList
+          data={recentSessions}
+          estimatedItemSize={100}
+          renderItem={({ item }) => (
+            <Link href="/(tabs)/scenarios" asChild>
+              <Pressable>
+                <ThemedView style={styles.sessionCard}>
+                  <ThemedText style={styles.sessionTitle}>
+                    {item.targetLanguage.name} Practice
+                  </ThemedText>
+                  <ThemedText style={styles.sessionDate}>
+                    {new Date(item.startTime).toLocaleDateString()}
+                  </ThemedText>
+                </ThemedView>
+              </Pressable>
+            </Link>
+          )}
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12'
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      ) : (
+        <ThemedView style={styles.emptyState}>
+          <ThemedText style={styles.emptyStateText}>
+            No recent conversations. Start one now!
+          </ThemedText>
+        </ThemedView>
+      )}
+    </ThemedView>
+  );
+
+  return (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+      showsVerticalScrollIndicator={false}
+    >
+      {renderWelcomeSection()}
+      {renderQuickStats()}
+      {renderRecentSection()}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    backgroundColor: "transparent", // This ensures it uses the theme background
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  contentContainer: {
+    flexGrow: 1,
+    paddingBottom: 20, // Adds some padding at the bottom for better scrolling
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  welcomeSection: {
+    padding: 20,
+    alignItems: "center",
+  },
+  welcomeText: {
+    fontSize: 28,
+    fontWeight: "bold",
+    marginTop: 10,
+  },
+  subtitle: {
+    fontSize: 16,
+    opacity: 0.8,
+    marginTop: 5,
+    marginBottom: 20,
+  },
+  startButton: {
+    backgroundColor: "#007AFF",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 10,
+  },
+  startButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  statsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    padding: 20,
+  },
+  statCard: {
+    alignItems: "center",
+    flex: 1,
+    margin: 5,
+    padding: 10,
+    borderRadius: 12,
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+  statLabel: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  recentSection: {
+    padding: 20,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    marginBottom: 15,
+  },
+  sessionCard: {
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+  sessionTitle: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  sessionDate: {
+    fontSize: 14,
+    opacity: 0.7,
+    marginTop: 4,
+  },
+  emptyState: {
+    padding: 30,
+    alignItems: "center",
+  },
+  emptyStateText: {
+    fontSize: 16,
+    opacity: 0.7,
+    textAlign: "center",
   },
 });
