@@ -15,7 +15,7 @@ export default function HomeScreen() {
   const recentSessions: Session[] = [];
 
   const renderWelcomeSection = () => (
-    <ThemedView style={styles.welcomeSection}>
+    <ThemedView style={styles.welcomeSection} useSafeArea>
       <HelloWave />
       <ThemedText style={styles.welcomeText}>
         Welcome{user?.name ? `, ${user.name}` : ""}!
