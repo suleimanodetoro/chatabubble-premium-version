@@ -1,42 +1,57 @@
 // hooks/useAppStore.ts
-
 import { create } from 'zustand';
-import { Language, User, Session, Scenario } from '../types';
+import { Language, Scenario, Session, User } from '../types';
 
 interface AppState {
   user: User | null;
   currentSession: Session | null;
   currentScenario: Scenario | null;
-  sourceLanguage: Language | null;
   targetLanguage: Language | null;
-  isLoading: boolean;
-  colorScheme: 'light' | 'dark';
+  sourceLanguage: Language | null;
+  sessions: Session[];
+  scenarios: Scenario[];
   
   // Actions
   setUser: (user: User | null) => void;
   setCurrentSession: (session: Session | null) => void;
   setCurrentScenario: (scenario: Scenario | null) => void;
-  setSourceLanguage: (language: Language | null) => void;
   setTargetLanguage: (language: Language | null) => void;
-  setIsLoading: (loading: boolean) => void;
-  setColorScheme: (scheme: 'light' | 'dark') => void;
+  setSourceLanguage: (language: Language | null) => void;
+  addSession: (session: Session) => void;
+  addScenario: (scenario: Scenario) => void;
 }
+
+const DEFAULT_SOURCE_LANGUAGE: Language = {
+  code: 'en',
+  name: 'English',
+  direction: 'ltr'
+};
+
+const DEFAULT_TARGET_LANGUAGE: Language = {
+  code: 'es',
+  name: 'Spanish',
+  direction: 'ltr'
+};
 
 export const useAppStore = create<AppState>((set) => ({
   user: null,
   currentSession: null,
   currentScenario: null,
-  sourceLanguage: null,
-  targetLanguage: null,
-  isLoading: false,
-  colorScheme: 'light',
+  targetLanguage: DEFAULT_TARGET_LANGUAGE, // Set default target language
+  sourceLanguage: DEFAULT_SOURCE_LANGUAGE, // Set default source language
+  sessions: [],
+  scenarios: [],
 
-  // Actions
   setUser: (user) => set({ user }),
   setCurrentSession: (session) => set({ currentSession: session }),
   setCurrentScenario: (scenario) => set({ currentScenario: scenario }),
-  setSourceLanguage: (language) => set({ sourceLanguage: language }),
   setTargetLanguage: (language) => set({ targetLanguage: language }),
-  setIsLoading: (loading) => set({ isLoading: loading }),
-  setColorScheme: (scheme) => set({ colorScheme: scheme }),
+  setSourceLanguage: (language) => set({ sourceLanguage: language }),
+  addSession: (session) => set((state) => ({ 
+    sessions: [...state.sessions, session],
+    currentSession: session 
+  })),
+  addScenario: (scenario) => set((state) => ({ 
+    scenarios: [...state.scenarios, scenario] 
+  })),
 }));
