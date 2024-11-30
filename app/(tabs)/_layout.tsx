@@ -10,6 +10,7 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
+        headerShown:false,
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         tabBarInactiveTintColor: Colors[colorScheme ?? 'light'].tabIconDefault,
       }}
@@ -26,6 +27,12 @@ export default function TabLayout() {
         options={{
           title: 'Scenarios',
           tabBarIcon: ({ color }) => <HapticTab iconName="book" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="create-scenario"
+        options={{
+          href: null, // This hides the tab but keeps the screen accessible
         }}
       />
       <Tabs.Screen
