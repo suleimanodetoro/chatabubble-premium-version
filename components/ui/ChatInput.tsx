@@ -1,64 +1,45 @@
 // components/ui/ChatInput.tsx
 import { useState } from 'react';
-import { StyleSheet, TextInput, Pressable, View } from 'react-native';
+import { StyleSheet, TextInput, Pressable, View, Platform } from 'react-native';
 import { ThemedText } from '../ThemedText';
-import { useThemeColor } from '@/hooks/useThemeColor';
-import * as Haptics from 'expo-haptics';
 
-interface ChatInputProps {
+interface Props {
   onSend: (message: string) => void;
-  placeholder?: string;
+  isLoading?: boolean;
 }
 
-export function ChatInput({ onSend, placeholder = 'Type a message...' }: ChatInputProps) {
-  const [message, setMessage] = useState('');
-  
-  const backgroundColor = useThemeColor(
-    { light: '#F2F2F7', dark: '#1C1C1E' },
-    'background'
-  );
-  
-  const textColor = useThemeColor(
-    { light: '#000000', dark: '#FFFFFF' },
-    'text'
-  );
-  
-  const placeholderColor = useThemeColor(
-    { light: '#8E8E93', dark: '#636366' },
-    'tabIconDefault'
-  );
-
-  const tintColor = useThemeColor({}, 'tint');
+export function ChatInput({ onSend, isLoading }: Props) {
+  const [text, setText] = useState('');
 
   const handleSend = () => {
-    if (message.trim()) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      onSend(message.trim());
-      setMessage('');
-    }
+    if (!text.trim() || isLoading) return;
+    onSend(text);
+    setText('');
   };
 
   return (
     <View style={styles.container}>
       <TextInput
-        style={[styles.input, { backgroundColor, color: textColor }]}
-        value={message}
-        onChangeText={setMessage}
-        placeholder={placeholder}
-        placeholderTextColor={placeholderColor}
-        multiline
-        maxLength={500}
+        style={styles.input}
+        value={text}
+        onChangeText={setText}
+        placeholder="Type a message..."
+        placeholderTextColor="#999"
+        multiline={false} // Changed to false
+        maxLength={1000}
+        returnKeyType="send" // Added
+        enablesReturnKeyAutomatically={true} // Added
+        onSubmitEditing={handleSend} // Added
+        blurOnSubmit={false} // Added
       />
-      <Pressable
+      <Pressable 
         onPress={handleSend}
-        style={({ pressed }) => [
+        style={[
           styles.sendButton,
-          { opacity: pressed ? 0.7 : 1 }
+          (!text.trim() || isLoading) && styles.sendButtonDisabled
         ]}
       >
-        <ThemedText style={[styles.sendButtonText, { color: tintColor }]}>
-          Send
-        </ThemedText>
+        <ThemedText style={styles.sendButtonText}>Send</ThemedText>
       </Pressable>
     </View>
   );
@@ -68,21 +49,36 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     padding: 8,
-    alignItems: 'flex-end',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#ccc',
+    backgroundColor: '#fff',
+    paddingBottom: Platform.OS === 'ios' ? 30 : 8,
   },
   input: {
     flex: 1,
+    minHeight: 40,
+    maxHeight: 100,
+    backgroundColor: '#f2f2f7',
     borderRadius: 20,
     paddingHorizontal: 15,
-    paddingVertical: 10,
-    maxHeight: 100,
+    paddingTop: 10,
+    paddingBottom: 10,
+    marginRight: 8,
     fontSize: 16,
   },
   sendButton: {
-    marginLeft: 8,
-    padding: 8,
+    alignSelf: 'flex-end',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
   },
   sendButtonText: {
+    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
