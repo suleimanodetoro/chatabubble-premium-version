@@ -20,7 +20,7 @@ export function BackButton() {
       ]}
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
     >
-      <Feather name="arrow-left" size={24} color="#007AFF" />
+      <Feather name="chevron-left" size={28} color="#007AFF" />
     </Pressable>
   );
 }

@@ -1,13 +1,13 @@
 // app/(chat)/[id].tsx
-import { View, StyleSheet, Platform, Pressable } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import { useCallback } from 'react';
 import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, router } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import { Stack } from 'expo-router';
 import { ChatInput } from '../../components/ui/ChatInput';
 import { ChatBubble } from '../../components/ui/ChatBubble';
 import { useChatContext } from '../../contexts/ChatContext';
+import { BackButton } from '../../components/ui/BackButton';
 
 export default function ChatScreen() {
   const { state } = useChatContext();
@@ -18,23 +18,19 @@ export default function ChatScreen() {
   ), []);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <Stack.Screen 
         options={{
           headerShown: false,
         }} 
       />
       
-      <View style={[styles.header, { paddingTop: insets.top }]}>
-        <Pressable 
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <Feather name="arrow-left" size={24} color="#007AFF" />
-        </Pressable>
+      {/* Header */}
+      <View style={styles.header}>
+        <BackButton />
       </View>
       
-      <View style={[styles.content, { paddingBottom: insets.bottom }]}>
+      <View style={styles.content}>
         <FlashList
           data={state.messages}
           renderItem={renderItem}
@@ -68,10 +64,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
     backgroundColor: '#fff',
-  },
-  backButton: {
-    padding: 8,
-    marginLeft: -8,
   },
   content: {
     flex: 1,
