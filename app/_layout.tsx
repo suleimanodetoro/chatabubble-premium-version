@@ -6,28 +6,25 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <Stack screenOptions={{
-      headerStyle: {
-        backgroundColor: colorScheme === 'dark' ? '#000' : '#fff',
-      },
-      headerTintColor: colorScheme === 'dark' ? '#fff' : '#000',
-      headerBackTitle: "Back",
-      headerShadowVisible: false,
-    }}>
+    <Stack 
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: colorScheme === 'dark' ? '#000' : '#fff',
+        },
+        headerTintColor: colorScheme === 'dark' ? '#fff' : '#000',
+        headerShadowVisible: false,
+      }}
+    >
       <Stack.Screen 
         name="(tabs)" 
-        options={{ 
-          headerShown: false  // This hides the header for tab screens
-        }} 
+        options={{ headerShown: false }} 
       />
       <Stack.Screen 
-        name="(chat)/[id]" 
-        options={{
-          presentation: 'card',
-          headerShown: true,
-          headerBackTitle: "Back",
-          title: "Chat"
-        }}
+        name="(chat)" 
+        options={{ 
+          headerShown: false,
+          presentation: 'fullScreenModal',
+        }} 
       />
     </Stack>
   );
