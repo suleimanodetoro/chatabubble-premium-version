@@ -6,7 +6,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <Stack 
+    <Stack
       screenOptions={{
         headerStyle: {
           backgroundColor: colorScheme === 'dark' ? '#000' : '#fff',
@@ -15,16 +15,23 @@ export default function RootLayout() {
         headerShadowVisible: false,
       }}
     >
-      <Stack.Screen 
-        name="(tabs)" 
-        options={{ headerShown: false }} 
+      <Stack.Screen
+        name="(tabs)"
+        options={{ headerShown: false }}
       />
-      <Stack.Screen 
-        name="(chat)" 
-        options={{ 
+      <Stack.Screen
+        name="(chat)"
+        options={{
           headerShown: false,
           presentation: 'fullScreenModal',
-        }} 
+        }}
+      />
+      <Stack.Screen
+        name="create-scenario"
+        options={{
+          presentation: 'modal',
+          title: 'Create Scenario'
+        }}
       />
     </Stack>
   );
