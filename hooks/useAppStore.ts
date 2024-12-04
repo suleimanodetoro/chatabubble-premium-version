@@ -10,17 +10,18 @@ interface AppState {
   currentScenario: Scenario | null;
   targetLanguage: Language | null;
   sourceLanguage: Language | null;
-  sessions: Session[];
   scenarios: Scenario[];
-  
+  activeSessions: Record<string, Session>;
+
   // Actions
   setUser: (user: User | null) => void;
   setCurrentSession: (session: Session | null) => void;
   setCurrentScenario: (scenario: Scenario | null) => void;
   setTargetLanguage: (language: Language | null) => void;
   setSourceLanguage: (language: Language | null) => void;
-  addSession: (session: Session) => void;
   addScenario: (scenario: Scenario) => void;
+  saveSession: (session: Session) => void;
+  loadSession: (sessionId: string) => Session | null;
 }
 
 const DEFAULT_SOURCE_LANGUAGE: Language = {
@@ -43,31 +44,47 @@ export const useAppStore = create<AppState>()(
       currentScenario: null,
       targetLanguage: null,
       sourceLanguage: DEFAULT_SOURCE_LANGUAGE,
-      sessions: [],
       scenarios: [],
+      activeSessions: {},
 
+      // Actions
       setUser: (user) => set({ user }),
       setCurrentSession: (session) => set({ currentSession: session }),
       setCurrentScenario: (scenario) => set({ currentScenario: scenario }),
       setTargetLanguage: (language) => set({ targetLanguage: language }),
       setSourceLanguage: (language) => set({ sourceLanguage: language }),
-      addSession: (session) => set((state) => {
-        console.log('Adding session:', session);
-        return { 
-          sessions: [...state.sessions, session],
-          currentSession: session 
-        };
-      }),
+      
       addScenario: (scenario) => set((state) => {
         console.log('Adding scenario:', scenario);
-        const newScenarios = [...state.scenarios, scenario];
-        console.log('Updated scenarios:', newScenarios);
-        return { scenarios: newScenarios };
+        return { scenarios: [...state.scenarios, scenario] };
       }),
+
+      // New Actions with Logging
+      saveSession: (session) => {
+        console.log('Saving session:', session);
+        set((state) => ({
+          activeSessions: {
+            ...state.activeSessions,
+            [session.id]: session
+          },
+          currentSession: session
+        }));
+      },
+      
+      loadSession: (sessionId) => {
+        const session = get().activeSessions[sessionId];
+        console.log('Loading session:', { sessionId, found: !!session });
+        return session || null;
+      },
     }),
     {
       name: 'app-storage',
       storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        scenarios: state.scenarios,
+        activeSessions: state.activeSessions,
+        sourceLanguage: state.sourceLanguage,
+      }),
     }
   )
 );
