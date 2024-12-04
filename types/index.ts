@@ -40,7 +40,7 @@ export interface Language {
       personality: string;
       languageStyle: "formal" | "casual" | "mixed";
     };
-    targetLanguage: Language; // Added field
+    targetLanguage: Language;
   }
   
   export interface Session {
@@ -52,6 +52,7 @@ export interface Language {
     messages: ChatMessage[];
     startTime: number;
     lastUpdated: number;
+    scenario?: Scenario;
   }
   
   export const PREDEFINED_LANGUAGES: Language[] = [
@@ -65,16 +66,18 @@ export interface Language {
     { code: 'zh', name: 'Chinese', direction: 'ltr' },
     { code: 'ko', name: 'Korean', direction: 'ltr' },
     { code: 'ar', name: 'Arabic', direction: 'rtl' },
-    { code: 'yo', name: 'Yoruba', direction: 'ltr' }, // Added Yoruba
-    { code: 'ha', name: 'Hausa', direction: 'ltr' },  // Added Hausa
-    { code: 'ig', name: 'Igbo', direction: 'ltr' },   // Added Igbo
+    { code: 'yo', name: 'Yoruba', direction: 'ltr' },
+    { code: 'ha', name: 'Hausa', direction: 'ltr' },
+    { code: 'ig', name: 'Igbo', direction: 'ltr' },
   ];
   
   export type RootStackParamList = {
+    "/": undefined;
     "/(tabs)": undefined;
     "/(tabs)/index": undefined;
     "/(tabs)/scenarios": undefined;
     "/(tabs)/profile": undefined;
+    "/create-scenario": undefined;
     "/(chat)/[id]": { id: string };
   };
   
@@ -83,4 +86,3 @@ export interface Language {
       interface RootParamList extends RootStackParamList {}
     }
   }
-  
