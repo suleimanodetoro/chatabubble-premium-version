@@ -8,9 +8,11 @@ import { ChatInput } from '../../components/ui/ChatInput';
 import { ChatBubble } from '../../components/ui/ChatBubble';
 import { useChatContext } from '../../contexts/ChatContext';
 import { BackButton } from '../../components/ui/BackButton';
+import { useAppStore } from '../../hooks/useAppStore';
 
 export default function ChatScreen() {
   const { state } = useChatContext();
+  const { currentSession } = useAppStore();
   const insets = useSafeAreaInsets();
 
   const renderItem = useCallback(({ item }) => (
@@ -25,7 +27,6 @@ export default function ChatScreen() {
         }} 
       />
       
-      {/* Header */}
       <View style={styles.header}>
         <BackButton />
       </View>
@@ -44,7 +45,7 @@ export default function ChatScreen() {
         />
         
         <View style={[styles.inputWrapper, { paddingBottom: insets.bottom }]}>
-          <ChatInput />
+          <ChatInput sessionLanguage={currentSession?.targetLanguage} />
         </View>
       </View>
     </View>

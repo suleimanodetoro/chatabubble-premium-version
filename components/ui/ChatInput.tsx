@@ -5,14 +5,19 @@ import { ThemedText } from '../ThemedText';
 import { useChatContext } from '../../contexts/ChatContext';
 import { useAppStore } from '../../hooks/useAppStore';
 import { OpenAIService } from '../../lib/services/openai';
+import { Language } from '../../types';
 
-export const ChatInput = memo(function ChatInput() {
+interface ChatInputProps {
+  sessionLanguage: Language | null;
+}
+
+export const ChatInput = memo(function ChatInput({ sessionLanguage }: ChatInputProps) {
   const [inputText, setInputText] = useState('');
   const { state, dispatch } = useChatContext();
-  const { currentScenario, targetLanguage } = useAppStore();
+  const { currentScenario } = useAppStore();
 
   const handleSend = useCallback(async () => {
-    if (!inputText.trim() || state.isLoading || !currentScenario || !targetLanguage) return;
+    if (!inputText.trim() || state.isLoading || !currentScenario || !sessionLanguage) return;
 
     const trimmedText = inputText.trim();
     setInputText('');
@@ -35,13 +40,15 @@ export const ChatInput = memo(function ChatInput() {
       // Add user message
       dispatch({ type: 'ADD_MESSAGE', payload: userMessage });
 
+      console.log('Using language for translation:', sessionLanguage.name); // Debug log
+
       // Get translations and AI response in parallel
       const [translatedUserText, aiResponse] = await Promise.all([
-        OpenAIService.translateText(trimmedText, targetLanguage.name),
+        OpenAIService.translateText(trimmedText, sessionLanguage.name),
         OpenAIService.generateChatCompletion(
           [...state.messages, userMessage],
           currentScenario,
-          targetLanguage.name
+          sessionLanguage.name
         )
       ]);
 
@@ -81,7 +88,7 @@ export const ChatInput = memo(function ChatInput() {
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [inputText, state.messages, currentScenario, targetLanguage]);
+  }, [inputText, state.messages, currentScenario, sessionLanguage]);
 
   return (
     <View style={styles.container}>
