@@ -12,15 +12,18 @@ import { Scenario, Session } from "../../types";
 export default function ScenariosScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const {
-    scenarios, // Get scenarios from store instead of constant
+    scenarios,
     setCurrentScenario,
     setCurrentSession,
+    saveSession,
     sourceLanguage,
-    targetLanguage,
   } = useAppStore();
 
   const handleScenarioPress = (scenario: Scenario) => {
+    console.log('Pressing scenario:', scenario);
+    
     if (!sourceLanguage || !scenario.targetLanguage) {
+      console.log('Missing languages:', { sourceLanguage, targetLanguage: scenario.targetLanguage });
       Alert.alert(
         "Language Selection Required",
         "This scenario doesn't have a target language set"
@@ -28,23 +31,27 @@ export default function ScenariosScreen() {
       return;
     }
   
-    const sessionId = `${scenario.id}-${Date.now()}`;
+    // Use scenario ID directly for consistent session handling
+    const sessionId = scenario.id;
+    console.log('Using session ID:', sessionId);
   
+    // Create new session
     const newSession: Session = {
       id: sessionId,
       userId: "guest",
       scenarioId: scenario.id,
-      targetLanguage: scenario.targetLanguage, // Use scenario's language
+      targetLanguage: scenario.targetLanguage,
       sourceLanguage,
       messages: [],
       startTime: Date.now(),
       lastUpdated: Date.now(),
+      scenario: scenario,
     };
-    console.log('Creating session with language:', newSession.targetLanguage); // Add this
-  setCurrentScenario(scenario);
-  setCurrentSession(newSession);
   
-
+    console.log('Creating/updating session:', newSession);
+    setCurrentScenario(scenario);
+    setCurrentSession(newSession);
+    saveSession(newSession);
   
     router.push({
       pathname: "/(chat)/[id]",

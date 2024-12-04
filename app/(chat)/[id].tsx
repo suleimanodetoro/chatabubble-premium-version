@@ -1,6 +1,7 @@
 // app/(chat)/[id].tsx
 import { View, StyleSheet, Platform } from 'react-native';
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
@@ -9,11 +10,50 @@ import { ChatBubble } from '../../components/ui/ChatBubble';
 import { useChatContext } from '../../contexts/ChatContext';
 import { BackButton } from '../../components/ui/BackButton';
 import { useAppStore } from '../../hooks/useAppStore';
+import { StorageService } from '../../lib/services/storage';
+import { ThemedText } from '../../components/ThemedText';
 
 export default function ChatScreen() {
-  const { state } = useChatContext();
-  const { currentSession } = useAppStore();
-  const insets = useSafeAreaInsets();
+  const { id } = useLocalSearchParams();
+  const { state, dispatch } = useChatContext();
+  const { 
+    currentSession, 
+    currentScenario, 
+    loadSession, 
+    setCurrentSession, 
+    setCurrentScenario 
+  } = useAppStore();  const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    async function loadChatState() {
+      if (id) {
+        try {
+          console.log('Loading chat state for ID:', id);
+          
+          // Load history
+          const history = await StorageService.loadChatHistory(id as string);
+          console.log('Loaded history:', history);
+          
+          if (history && history.length > 0) {
+            dispatch({ type: 'LOAD_MESSAGES', payload: history });
+          }
+
+          // Load session if not already loaded
+          if (!currentSession) {
+            const savedSession = loadSession(id as string);
+            if (savedSession) {
+              console.log('Loaded session:', savedSession);
+              setCurrentSession(savedSession);
+              setCurrentScenario(savedSession.scenario);
+            }
+          }
+        } catch (error) {
+          console.error('Error loading chat state:', error);
+        }
+      }
+    }
+    loadChatState();
+  }, [id, dispatch, currentSession, loadSession]);
 
   const renderItem = useCallback(({ item }) => (
     <ChatBubble message={item} />
@@ -29,6 +69,11 @@ export default function ChatScreen() {
       
       <View style={styles.header}>
         <BackButton />
+        {currentScenario && (
+          <ThemedText style={styles.headerTitle}>
+            {currentScenario.title}
+          </ThemedText>
+        )}
       </View>
       
       <View style={styles.content}>
@@ -45,7 +90,9 @@ export default function ChatScreen() {
         />
         
         <View style={[styles.inputWrapper, { paddingBottom: insets.bottom }]}>
-          <ChatInput sessionLanguage={currentSession?.targetLanguage} />
+          <ChatInput 
+            sessionLanguage={currentSession?.targetLanguage ?? null}
+          />
         </View>
       </View>
     </View>
@@ -65,6 +112,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
     backgroundColor: '#fff',
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 16,
+    flex: 1,
   },
   content: {
     flex: 1,
