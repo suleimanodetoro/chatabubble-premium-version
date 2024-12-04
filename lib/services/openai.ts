@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Config } from '../../constants/Config';
 import { ChatMessage, Scenario } from '../../types';
 
+
 const api = axios.create({
   baseURL: Config.BASE_URL,
   headers: {
@@ -55,7 +56,7 @@ export class OpenAIService {
   static async translateText(text: string, targetLanguage: string): Promise<string> {
     try {
       const response = await api.post('', {
-        model: 'gpt-3.5-turbo',
+        model: Config.MODEL,
         messages: [
           {
             role: 'system',
