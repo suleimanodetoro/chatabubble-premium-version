@@ -6,6 +6,7 @@ import { useChatContext } from '../../contexts/ChatContext';
 import { useAppStore } from '../../hooks/useAppStore';
 import { OpenAIService } from '../../lib/services/openai';
 import { Language } from '../../types';
+import { StorageService } from '../../lib/services/storage';
 
 interface ChatInputProps {
   sessionLanguage: Language | null;
@@ -14,10 +15,20 @@ interface ChatInputProps {
 export const ChatInput = memo(function ChatInput({ sessionLanguage }: ChatInputProps) {
   const [inputText, setInputText] = useState('');
   const { state, dispatch } = useChatContext();
-  const { currentScenario } = useAppStore();
+  const { currentScenario, currentSession } = useAppStore();
 
   const handleSend = useCallback(async () => {
-    if (!inputText.trim() || state.isLoading || !currentScenario || !sessionLanguage) return;
+    console.log('Send attempt:', { 
+      hasInput: !!inputText.trim(), 
+      isLoading: state.isLoading,
+      hasScenario: !!currentScenario,
+      hasLanguage: !!sessionLanguage,
+      language: sessionLanguage?.name
+    });
+
+    if (!inputText.trim() || state.isLoading || !currentScenario || !sessionLanguage) {
+      return;
+    }
 
     const trimmedText = inputText.trim();
     setInputText('');
@@ -26,6 +37,7 @@ export const ChatInput = memo(function ChatInput({ sessionLanguage }: ChatInputP
     dispatch({ type: 'SET_LOADING', payload: true });
 
     try {
+      // Create user message
       const userMessage = {
         id: Date.now().toString(),
         content: {
@@ -37,10 +49,7 @@ export const ChatInput = memo(function ChatInput({ sessionLanguage }: ChatInputP
         isEdited: false,
       };
 
-      // Add user message
       dispatch({ type: 'ADD_MESSAGE', payload: userMessage });
-
-      console.log('Using language for translation:', sessionLanguage.name); // Debug log
 
       // Get translations and AI response in parallel
       const [translatedUserText, aiResponse] = await Promise.all([
@@ -52,43 +61,49 @@ export const ChatInput = memo(function ChatInput({ sessionLanguage }: ChatInputP
         )
       ]);
 
-      // Update user message
+      // Update user message with translation
+      const updatedUserMessage = {
+        ...userMessage,
+        content: {
+          original: trimmedText,
+          translated: translatedUserText
+        }
+      };
+
       dispatch({
         type: 'UPDATE_MESSAGE',
         payload: {
           id: userMessage.id,
-          message: {
-            content: {
-              original: trimmedText,
-              translated: translatedUserText
-            }
-          }
+          message: updatedUserMessage
         }
       });
 
-      // Get AI translation
-      const translatedAiResponse = await OpenAIService.translateText(aiResponse, 'English');
+      // Create and add AI message
+      const aiMessage = {
+        id: (Date.now() + 1).toString(),
+        content: {
+          original: aiResponse,
+          translated: await OpenAIService.translateText(aiResponse, 'English')
+        },
+        sender: 'assistant',
+        timestamp: Date.now(),
+        isEdited: false,
+      };
 
-      // Add AI message
-      dispatch({
-        type: 'ADD_MESSAGE',
-        payload: {
-          id: Date.now().toString(),
-          content: {
-            original: aiResponse,
-            translated: translatedAiResponse,
-          },
-          sender: 'assistant',
-          timestamp: Date.now(),
-          isEdited: false,
-        }
-      });
+      dispatch({ type: 'ADD_MESSAGE', payload: aiMessage });
+
+      // Save chat history
+      if (currentSession) {
+        const updatedMessages = [...state.messages, updatedUserMessage, aiMessage];
+        await StorageService.saveChatHistory(currentSession.id, updatedMessages);
+      }
+
     } catch (error) {
       console.error('Message error:', error);
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [inputText, state.messages, currentScenario, sessionLanguage]);
+  }, [inputText, state.messages, currentScenario, sessionLanguage, currentSession, dispatch]);
 
   return (
     <View style={styles.container}>
@@ -101,6 +116,8 @@ export const ChatInput = memo(function ChatInput({ sessionLanguage }: ChatInputP
         maxLength={1000}
         editable={!state.isLoading}
         multiline
+        onSubmitEditing={handleSend}
+        blurOnSubmit={false}
       />
       <Pressable
         onPress={handleSend}
@@ -111,7 +128,9 @@ export const ChatInput = memo(function ChatInput({ sessionLanguage }: ChatInputP
           pressed && styles.sendButtonPressed
         ]}
       >
-        <ThemedText style={styles.sendButtonText}>Send</ThemedText>
+        <ThemedText style={styles.sendButtonText}>
+          {state.isLoading ? '...' : 'Send'}
+        </ThemedText>
       </Pressable>
     </View>
   );
@@ -123,7 +142,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     paddingHorizontal: 8,
     paddingTop: 8,
-    paddingBottom: 8,
+    paddingBottom: Platform.OS === 'ios' ? 8 : 8,
     backgroundColor: '#fff',
   },
   input: {
