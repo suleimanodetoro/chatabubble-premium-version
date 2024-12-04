@@ -1,5 +1,7 @@
 // hooks/useAppStore.ts
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Language, Scenario, Session, User } from '../types';
 
 interface AppState {
@@ -33,25 +35,39 @@ const DEFAULT_TARGET_LANGUAGE: Language = {
   direction: 'ltr'
 };
 
-export const useAppStore = create<AppState>((set) => ({
-  user: null,
-  currentSession: null,
-  currentScenario: null,
-  targetLanguage: DEFAULT_TARGET_LANGUAGE, // Set default target language
-  sourceLanguage: DEFAULT_SOURCE_LANGUAGE, // Set default source language
-  sessions: [],
-  scenarios: [],
+export const useAppStore = create<AppState>()(
+  persist(
+    (set, get) => ({
+      user: null,
+      currentSession: null,
+      currentScenario: null,
+      targetLanguage: null,
+      sourceLanguage: DEFAULT_SOURCE_LANGUAGE,
+      sessions: [],
+      scenarios: [],
 
-  setUser: (user) => set({ user }),
-  setCurrentSession: (session) => set({ currentSession: session }),
-  setCurrentScenario: (scenario) => set({ currentScenario: scenario }),
-  setTargetLanguage: (language) => set({ targetLanguage: language }),
-  setSourceLanguage: (language) => set({ sourceLanguage: language }),
-  addSession: (session) => set((state) => ({ 
-    sessions: [...state.sessions, session],
-    currentSession: session 
-  })),
-  addScenario: (scenario) => set((state) => ({ 
-    scenarios: [...state.scenarios, scenario] 
-  })),
-}));
+      setUser: (user) => set({ user }),
+      setCurrentSession: (session) => set({ currentSession: session }),
+      setCurrentScenario: (scenario) => set({ currentScenario: scenario }),
+      setTargetLanguage: (language) => set({ targetLanguage: language }),
+      setSourceLanguage: (language) => set({ sourceLanguage: language }),
+      addSession: (session) => set((state) => {
+        console.log('Adding session:', session);
+        return { 
+          sessions: [...state.sessions, session],
+          currentSession: session 
+        };
+      }),
+      addScenario: (scenario) => set((state) => {
+        console.log('Adding scenario:', scenario);
+        const newScenarios = [...state.scenarios, scenario];
+        console.log('Updated scenarios:', newScenarios);
+        return { scenarios: newScenarios };
+      }),
+    }),
+    {
+      name: 'app-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+    }
+  )
+);
