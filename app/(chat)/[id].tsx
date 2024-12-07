@@ -13,6 +13,12 @@ import { useAppStore } from '../../hooks/useAppStore';
 import { StorageService } from '../../lib/services/storage';
 import { ThemedText } from '../../components/ThemedText';
 
+const DEFAULT_LANGUAGE = {
+  code: 'en',
+  name: 'English',
+  direction: 'ltr'
+};
+
 export default function ChatScreen() {
   const { id } = useLocalSearchParams();
   const { state, dispatch } = useChatContext();
@@ -22,7 +28,8 @@ export default function ChatScreen() {
     loadSession, 
     setCurrentSession, 
     setCurrentScenario 
-  } = useAppStore();  const insets = useSafeAreaInsets();
+  } = useAppStore();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     async function loadChatState() {
@@ -53,11 +60,18 @@ export default function ChatScreen() {
       }
     }
     loadChatState();
-  }, [id, dispatch, currentSession, loadSession]);
+  }, [id, dispatch, currentSession, loadSession, setCurrentSession, setCurrentScenario]);
 
   const renderItem = useCallback(({ item }) => (
-    <ChatBubble message={item} />
-  ), []);
+    <ChatBubble 
+      message={item} 
+      language={
+        item.sender === 'assistant' 
+          ? currentSession?.targetLanguage ?? DEFAULT_LANGUAGE 
+          : DEFAULT_LANGUAGE
+      }
+    />
+  ), [currentSession]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -72,6 +86,11 @@ export default function ChatScreen() {
         {currentScenario && (
           <ThemedText style={styles.headerTitle}>
             {currentScenario.title}
+          </ThemedText>
+        )}
+        {currentSession?.targetLanguage && (
+          <ThemedText style={styles.headerLanguage}>
+            {currentSession.targetLanguage.name}
           </ThemedText>
         )}
       </View>
@@ -118,6 +137,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 16,
     flex: 1,
+  },
+  headerLanguage: {
+    fontSize: 14,
+    opacity: 0.7,
+    marginLeft: 8,
   },
   content: {
     flex: 1,
