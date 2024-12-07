@@ -1,8 +1,8 @@
 // hooks/useAppStore.ts
-import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Language, Scenario, Session, User } from '../types';
+import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Language, Scenario, Session, User } from "../types";
 
 interface AppState {
   user: User | null;
@@ -25,15 +25,15 @@ interface AppState {
 }
 
 const DEFAULT_SOURCE_LANGUAGE: Language = {
-  code: 'en',
-  name: 'English',
-  direction: 'ltr'
+  code: "en",
+  name: "English",
+  direction: "ltr",
 };
 
 const DEFAULT_TARGET_LANGUAGE: Language = {
-  code: 'es',
-  name: 'Spanish',
-  direction: 'ltr'
+  code: "es",
+  name: "Spanish",
+  direction: "ltr",
 };
 
 export const useAppStore = create<AppState>()(
@@ -47,38 +47,45 @@ export const useAppStore = create<AppState>()(
       scenarios: [],
       activeSessions: {},
 
-      // Actions
       setUser: (user) => set({ user }),
       setCurrentSession: (session) => set({ currentSession: session }),
       setCurrentScenario: (scenario) => set({ currentScenario: scenario }),
       setTargetLanguage: (language) => set({ targetLanguage: language }),
       setSourceLanguage: (language) => set({ sourceLanguage: language }),
-      
-      addScenario: (scenario) => set((state) => {
-        console.log('Adding scenario:', scenario);
-        return { scenarios: [...state.scenarios, scenario] };
-      }),
 
-      // New Actions with Logging
+      addScenario: (scenario) =>
+        set((state) => {
+          console.log("Adding scenario:", scenario);
+          return { scenarios: [...state.scenarios, scenario] };
+        }),
+
       saveSession: (session) => {
-        console.log('Saving session:', session);
+        console.log("Saving session:", session);
         set((state) => ({
           activeSessions: {
             ...state.activeSessions,
-            [session.id]: session
+            [session.id]: session,
           },
-          currentSession: session
+          currentSession: session,
+          targetLanguage: session.targetLanguage, // Add this line
         }));
       },
-      
+
       loadSession: (sessionId) => {
         const session = get().activeSessions[sessionId];
-        console.log('Loading session:', { sessionId, found: !!session });
+        if (session) {
+          set({ targetLanguage: session.targetLanguage }); // Add this line
+        }
+        console.log("Loading session:", {
+          sessionId,
+          found: !!session,
+          targetLanguage: session?.targetLanguage,
+        });
         return session || null;
       },
     }),
     {
-      name: 'app-storage',
+      name: "app-storage",
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         scenarios: state.scenarios,
