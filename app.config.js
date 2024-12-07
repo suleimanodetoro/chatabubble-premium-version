@@ -1,10 +1,11 @@
 // app.config.js
 import 'dotenv/config';
 
-export default ({ config }) => ({
-  ...config,
-  extra: {
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-  },
-});
-
+export default {
+    expo: {
+      // ... other config
+      extra: {
+        OPENAI_API_KEY: process.env.EXPO_PUBLIC_OPENAI_API_KEY,
+      },
+    },
+  };
