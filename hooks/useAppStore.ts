@@ -91,7 +91,10 @@ export const useAppStore = create<AppState>()(
         scenarios: state.scenarios,
         activeSessions: state.activeSessions,
         sourceLanguage: state.sourceLanguage,
+        user: state.user,  // sync auth session
+
       }),
+      
     }
   )
 );

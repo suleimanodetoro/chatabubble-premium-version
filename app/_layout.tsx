@@ -5,12 +5,15 @@ import { useRouter } from 'expo-router';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { supabase } from '@/lib/supabase/client';
 import { Session } from '@supabase/supabase-js';
+import { useAppStore } from '@/hooks/useAppStore';
+
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const setUser = useAppStore(state => state.setUser);
 
   useEffect(() => {
     console.log('Checking session...');
@@ -18,6 +21,8 @@ export default function RootLayout() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       console.log('Session check result:', session ? 'Has session' : 'No session');
       setSession(session);
+      setUser(session?.user ?? null);  
+
       setIsLoading(false);
       
       // Explicitly redirect based on session
