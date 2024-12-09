@@ -1,54 +1,63 @@
 // app/_layout.tsx
 import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
-import { useRouter } from 'expo-router';
+import { useRouter, useSegments } from 'expo-router';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { supabase } from '@/lib/supabase/client';
 import { Session } from '@supabase/supabase-js';
 import { useAppStore } from '@/hooks/useAppStore';
-
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
-  const setUser = useAppStore(state => state.setUser);
+  const segments = useSegments();
+  const { setUser } = useAppStore();
 
+  // Check authentication state and redirect accordingly
+  useEffect(() => {
+    // Don't redirect when still loading
+    if (isLoading) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+    const inProtectedRoute = !inAuthGroup;
+
+    if (!session && inProtectedRoute) {
+      // No session but trying to access protected route
+      router.replace('/(auth)/login');
+    } else if (session && inAuthGroup) {
+      // Have session but still in auth group
+      router.replace('/(tabs)');
+    }
+  }, [session, segments, isLoading]);
+
+  // Initialize and monitor auth state
   useEffect(() => {
     console.log('Checking session...');
     
     supabase.auth.getSession().then(({ data: { session } }) => {
       console.log('Session check result:', session ? 'Has session' : 'No session');
       setSession(session);
-      setUser(session?.user ?? null);  
-
+      setUser(session?.user ?? null);
       setIsLoading(false);
-      
-      // Explicitly redirect based on session
-      if (!session) {
-        console.log('Redirecting to login...');
-        router.replace('/(auth)/login');
-      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       console.log('Auth state changed:', _event, session ? 'Has session' : 'No session');
       setSession(session);
+      setUser(session?.user ?? null);
       
-      // Redirect on auth state change
       if (!session) {
-        router.replace('/(auth)/login');
-      } else {
-        router.replace('/(tabs)');
+        // Reset any app state here if needed
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [router]);
+  }, []);
 
   if (isLoading) {
-    return null;
+    return null; // Or a loading screen
   }
 
   return (
@@ -61,30 +70,35 @@ export default function RootLayout() {
         headerShadowVisible: false,
       }}
     >
-      <Stack.Screen
-        name="(auth)"
-        options={{
-          headerShown: false,
-        }}
-      />
-      <Stack.Screen
-        name="(tabs)"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="(chat)"
-        options={{
-          headerShown: false,
-          presentation: 'fullScreenModal',
-        }}
-      />
-      <Stack.Screen
-        name="create-scenario"
-        options={{
-          presentation: 'modal',
-          title: 'Create Scenario'
-        }}
-      />
+      {!session ? (
+        <Stack.Screen
+          name="(auth)"
+          options={{
+            headerShown: false,
+          }}
+        />
+      ) : (
+        <>
+          <Stack.Screen
+            name="(tabs)"
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="(chat)"
+            options={{
+              headerShown: false,
+              presentation: 'fullScreenModal',
+            }}
+          />
+          <Stack.Screen
+            name="create-scenario"
+            options={{
+              presentation: 'modal',
+              title: 'Create Scenario'
+            }}
+          />
+        </>
+      )}
     </Stack>
   );
 }
