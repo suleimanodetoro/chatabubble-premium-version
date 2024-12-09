@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Language, Scenario, Session, User } from "../types";
+import { StorageService } from "@/lib/services/storage";
 
 interface AppState {
   user: User | null;
@@ -20,19 +21,13 @@ interface AppState {
   setTargetLanguage: (language: Language | null) => void;
   setSourceLanguage: (language: Language | null) => void;
   addScenario: (scenario: Scenario) => void;
-  saveSession: (session: Session) => void;
-  loadSession: (sessionId: string) => Session | null;
+  saveSession: (session: Session) => Promise<void>;
+  loadSession: (sessionId: string) => Promise<Session | null>;
 }
 
 const DEFAULT_SOURCE_LANGUAGE: Language = {
   code: "en",
   name: "English",
-  direction: "ltr",
-};
-
-const DEFAULT_TARGET_LANGUAGE: Language = {
-  code: "es",
-  name: "Spanish",
   direction: "ltr",
 };
 
@@ -59,29 +54,61 @@ export const useAppStore = create<AppState>()(
           return { scenarios: [...state.scenarios, scenario] };
         }),
 
-      saveSession: (session) => {
+      saveSession: async (session) => {
         console.log("Saving session:", session);
-        set((state) => ({
-          activeSessions: {
-            ...state.activeSessions,
-            [session.id]: session,
-          },
-          currentSession: session,
-          targetLanguage: session.targetLanguage, // Add this line
-        }));
+        try {
+          // Save using StorageService first
+          await StorageService.saveSession(session);
+          
+          // Then update store state
+          set((state) => ({
+            activeSessions: {
+              ...state.activeSessions,
+              [session.id]: session,
+            },
+            currentSession: session,
+            targetLanguage: session.targetLanguage,
+          }));
+        } catch (error) {
+          console.error("Error saving session:", error);
+          throw error;
+        }
       },
 
-      loadSession: (sessionId) => {
-        const session = get().activeSessions[sessionId];
-        if (session) {
-          set({ targetLanguage: session.targetLanguage }); // Add this line
+      loadSession: async (sessionId) => {
+        try {
+          // Try loading from StorageService first
+          const storedSession = await StorageService.loadSession(sessionId);
+          
+          if (storedSession) {
+            // Update store state with loaded session
+            set((state) => ({
+              activeSessions: {
+                ...state.activeSessions,
+                [sessionId]: storedSession,
+              },
+              targetLanguage: storedSession.targetLanguage,
+            }));
+            return storedSession;
+          }
+          
+          // Fallback to store state if not found in storage
+          const session = get().activeSessions[sessionId];
+          if (session) {
+            set({ targetLanguage: session.targetLanguage });
+          }
+          
+          console.log("Loading session:", {
+            sessionId,
+            found: !!session,
+            targetLanguage: session?.targetLanguage,
+          });
+          
+          return session || null;
+        } catch (error) {
+          console.error("Error loading session:", error);
+          return null;
         }
-        console.log("Loading session:", {
-          sessionId,
-          found: !!session,
-          targetLanguage: session?.targetLanguage,
-        });
-        return session || null;
       },
     }),
     {
@@ -91,10 +118,8 @@ export const useAppStore = create<AppState>()(
         scenarios: state.scenarios,
         activeSessions: state.activeSessions,
         sourceLanguage: state.sourceLanguage,
-        user: state.user,  // sync auth session
-
+        user: state.user,
       }),
-      
     }
   )
 );
