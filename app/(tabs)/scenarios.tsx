@@ -8,6 +8,8 @@ import { ThemedText } from "../../components/ThemedText";
 import { Collapsible } from "../../components/Collapsible";
 import { useAppStore } from "../../hooks/useAppStore";
 import { Scenario, Session } from "../../types";
+import { generateId } from "@/lib/utils/ids";
+
 
 export default function ScenariosScreen() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -32,7 +34,7 @@ export default function ScenariosScreen() {
     }
   
     // Use scenario ID directly for consistent session handling
-    const sessionId = scenario.id;
+    const sessionId = generateId();
     console.log('Using session ID:', sessionId);
   
     // Create new session

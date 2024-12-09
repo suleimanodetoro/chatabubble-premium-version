@@ -16,6 +16,8 @@ import { ThemedText } from '@/components/ThemedText';
 import { LanguageSelector } from '@/components/ui/LanguageSelector';
 import { Scenario, Language } from '@/types';
 import { useAppStore } from '@/hooks/useAppStore';
+import { generateId } from '@/lib/utils/ids';
+
 
 export default function CreateScenarioScreen() {
   const [title, setTitle] = useState('');
@@ -63,7 +65,7 @@ export default function CreateScenarioScreen() {
 
     try {
       const newScenario: Scenario = {
-        id: Date.now().toString(),
+        id: generateId(),
         title: title.trim(),
         description: description.trim(),
         category: category as 'shopping' | 'dining' | 'travel' | 'business' | 'casual',
