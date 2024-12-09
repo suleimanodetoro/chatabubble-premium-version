@@ -1,3 +1,4 @@
+// app/(tabs)/profile.tsx
 import { StyleSheet, Alert, Pressable, TextInput, Modal, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';

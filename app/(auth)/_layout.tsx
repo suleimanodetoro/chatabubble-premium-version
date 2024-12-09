@@ -1,3 +1,4 @@
+// app(auth)/_layout.tsx
 import { Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { useRouter, useSegments } from 'expo-router';

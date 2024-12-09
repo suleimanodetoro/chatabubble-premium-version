@@ -1,3 +1,4 @@
+// lib/services/speech.ts
 import * as Speech from 'expo-speech';
 import { Language } from '@/types';
 
