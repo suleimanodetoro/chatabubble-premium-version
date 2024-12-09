@@ -1,81 +1,102 @@
-// lib/services/speech.ts
 import * as Speech from 'expo-speech';
 import { Language } from '@/types';
 
 export class SpeechService {
-  static async speak(text: string, language: Language) {
-    try {
-      console.log('Attempting to speak:', { text, language: language.name }); // Debug log
+  private static isSpeaking = false;
+  private static currentUtterance: string | null = null;
 
-      // Stop any currently playing speech (no await needed because stop() is synchronous)
+  private static async cleanup() {
+    try {
       Speech.stop();
+      this.isSpeaking = false;
+      this.currentUtterance = null;
+      // Add a small delay to ensure cleanup is complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } catch (error) {
+      console.error('Error in speech cleanup:', error);
+    }
+  }
+
+  static async speak(text: string, language: Language) {
+    // If the same text is already speaking, stop it
+    if (this.isSpeaking && this.currentUtterance === text) {
+      await this.stop();
+      return;
+    }
+
+    try {
+      // Clean up any existing speech
+      await this.cleanup();
 
       const langCode = this.getLanguageCode(language.code);
-      console.log('Using language code:', langCode); // Debug log
-
-      // Check if currently speaking
-      const isSpeaking = await Speech.isSpeakingAsync();
-      console.log('Is currently speaking:', isSpeaking);
-
-      // Check if language is supported before speaking
       const supported = await this.isLanguageSupported(langCode);
+      
       if (!supported) {
         console.warn(`Language ${language.name} not supported for speech`);
-        return; // Do not attempt to speak if not supported
+        return;
       }
 
-      const voices = await Speech.getAvailableVoicesAsync();
-      console.log('Available voices:', voices.length);
+      this.isSpeaking = true;
+      this.currentUtterance = text;
 
-      // Wrap Speech.speak in a promise to await its completion.
-      await new Promise<void>((resolve, reject) => {
-        Speech.speak(text, {
+      return new Promise<void>((resolve, reject) => {
+        const options = {
           language: langCode,
           pitch: 1.0,
           rate: 0.9,
           onStart: () => console.log('Speech started'),
           onDone: () => {
-            console.log('Speech finished');
+            this.cleanup();
             resolve();
           },
           onStopped: () => {
-            console.log('Speech stopped');
+            this.cleanup();
             resolve();
           },
-          onError: (error) => {
+          onError: (error: any) => {
+            this.cleanup();
             console.error('Speech error:', error);
             reject(error);
           },
-        });
-      });
+        };
 
+        Speech.speak(text, options);
+      });
     } catch (error) {
+      await this.cleanup();
       console.error('Speech service error:', error);
       throw error;
     }
   }
 
-  static stop() {
-    // Now we define the stop method
-    // Since Speech.stop() is synchronous, we just call it directly
-    Speech.stop();
-    console.log('Speech stopping requested');
+  static async stop() {
+    await this.cleanup();
   }
 
   static async isLanguageSupported(langCode: string): Promise<boolean> {
-    const voices = await Speech.getAvailableVoicesAsync();
-    return voices.some(voice => voice.language.startsWith(langCode));
+    try {
+      const voices = await Speech.getAvailableVoicesAsync();
+      return voices.some(voice => voice.language.startsWith(langCode));
+    } catch (error) {
+      console.error('Error checking language support:', error);
+      return false;
+    }
   }
 
   private static getLanguageCode(code: string): string {
-    // Map our language codes to BCP-47 language tags
     const languageMap: Record<string, string> = {
       'en': 'en-US',
       'es': 'es-ES',
       'fr': 'fr-FR',
       'de': 'de-DE',
       'it': 'it-IT',
-      'yo': 'yo-NG',
+      'pt': 'pt-PT',
+      'ja': 'ja-JP',
+      'zh': 'zh-CN',
+      'ko': 'ko-KR',
+      'ar': 'ar-SA',
+      'ru': 'ru-RU',
+      'hi': 'hi-IN',
     };
     return languageMap[code] || code;
   }
