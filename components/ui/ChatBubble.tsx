@@ -1,4 +1,5 @@
-import React, { memo, useCallback, useState } from "react";
+// components/ui/ChatBubble.tsx
+import React, { memo, useCallback, useState, useEffect } from "react";
 import { StyleSheet, View, Pressable, Alert } from "react-native";
 import { ThemedText } from "../ThemedText";
 import { useThemeColor } from "@/hooks/useThemeColor";
@@ -8,7 +9,6 @@ import { OpenAIService } from "../../lib/services/openai";
 import { useAppStore } from "../../hooks/useAppStore";
 import { SpeechService } from "@/lib/services/speech";
 import { Ionicons } from '@expo/vector-icons';
-
 
 export const ChatBubble = memo(function ChatBubble({
   message,
@@ -24,6 +24,15 @@ export const ChatBubble = memo(function ChatBubble({
   const [isSpeaking, setIsSpeaking] = useState(false);
   const isUser = message.sender === "user";
 
+  // Cleanup speech on unmount
+  useEffect(() => {
+    return () => {
+      if (isSpeaking) {
+        SpeechService.stop();
+      }
+    };
+  }, [isSpeaking]);
+
   const backgroundColor = useThemeColor(
     {
       light: isUser ? "#007AFF" : "#E9ECEF",
@@ -38,9 +47,12 @@ export const ChatBubble = memo(function ChatBubble({
   );
 
   const handleSpeak = useCallback(async () => {
-    try {
-      setIsSpeaking(true);
+    if (isSpeaking) {
+      await handleStop();
+      return;
+    }
 
+    try {
       const textToSpeak = message.content.original;
       const languageToSpeak = isUser ? sourceLanguage : currentSession?.targetLanguage;
 
@@ -49,23 +61,20 @@ export const ChatBubble = memo(function ChatBubble({
         return;
       }
 
+      setIsSpeaking(true);
       await SpeechService.speak(textToSpeak, languageToSpeak);
     } catch (error) {
       console.error("Speech error:", error);
       Alert.alert("Speech Error", "Unable to play speech. Please try again.");
     } finally {
-      // When speech finishes or fails, set isSpeaking back to false
       setIsSpeaking(false);
     }
-  }, [message.content.original, isUser, sourceLanguage, currentSession?.targetLanguage]);
+  }, [message.content.original, isUser, sourceLanguage, currentSession?.targetLanguage, isSpeaking]);
 
   const handleStop = useCallback(async () => {
     try {
       await SpeechService.stop();
-    } catch (error) {
-      console.error("Error stopping speech:", error);
     } finally {
-      // Ensure we set this to false even if stop fails
       setIsSpeaking(false);
     }
   }, []);
@@ -167,17 +176,13 @@ export const ChatBubble = memo(function ChatBubble({
 
           <Pressable
             style={[styles.speakerIcon, isSpeaking && styles.speakerIconActive]}
-            onPress={isSpeaking ? handleStop : handleSpeak}
+            onPress={handleSpeak}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            disabled={false} // Always allow pressing to stop instantly
           >
             {isSpeaking ? (
-              // Red square to indicate stop
-              <View style={{ width: 18, height: 18, backgroundColor: "red", borderRadius: 2 }} />
+              <View style={styles.stopIcon} />
             ) : (
-              // Speaker icon when not speaking
               <Ionicons name="volume-high" size={18} color={textColor} />
-
             )}
           </Pressable>
         </View>
@@ -198,6 +203,12 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     position: "relative",
     minWidth: 60,
+  },
+  stopIcon: {
+    width: 18,
+    height: 18,
+    backgroundColor: "red",
+    borderRadius: 2,
   },
   userContainer: {
     alignItems: "flex-end",

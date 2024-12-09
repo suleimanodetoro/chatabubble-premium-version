@@ -7,26 +7,23 @@ import { useAppStore } from '../../hooks/useAppStore';
 import { OpenAIService } from '../../lib/services/openai';
 import { Language } from '../../types';
 import { StorageService } from '../../lib/services/storage';
+import { generateId } from '@/lib/utils/ids';
 
 interface ChatInputProps {
   sessionLanguage: Language | null;
+  disabled?: boolean;
 }
 
-export const ChatInput = memo(function ChatInput({ sessionLanguage }: ChatInputProps) {
+export const ChatInput = memo(function ChatInput({ 
+  sessionLanguage, 
+  disabled = false 
+}: ChatInputProps) {
   const [inputText, setInputText] = useState('');
   const { state, dispatch } = useChatContext();
-  const { currentScenario, currentSession } = useAppStore();
+  const { currentScenario, currentSession, setCurrentSession } = useAppStore();
 
   const handleSend = useCallback(async () => {
-    console.log('Send attempt:', { 
-      hasInput: !!inputText.trim(), 
-      isLoading: state.isLoading,
-      hasScenario: !!currentScenario,
-      hasLanguage: !!sessionLanguage,
-      language: sessionLanguage?.name
-    });
-
-    if (!inputText.trim() || state.isLoading || !currentScenario || !sessionLanguage) {
+    if (!inputText.trim() || state.isLoading || !currentScenario || !sessionLanguage || disabled) {
       return;
     }
 
@@ -39,7 +36,7 @@ export const ChatInput = memo(function ChatInput({ sessionLanguage }: ChatInputP
     try {
       // Create user message
       const userMessage = {
-        id: Date.now().toString(),
+        id: generateId(),
         content: {
           original: trimmedText,
           translated: 'Translating...',
@@ -80,7 +77,7 @@ export const ChatInput = memo(function ChatInput({ sessionLanguage }: ChatInputP
 
       // Create and add AI message
       const aiMessage = {
-        id: (Date.now() + 1).toString(),
+        id: generateId(),
         content: {
           original: aiResponse,
           translated: await OpenAIService.translateText(aiResponse, 'English')
@@ -92,10 +89,17 @@ export const ChatInput = memo(function ChatInput({ sessionLanguage }: ChatInputP
 
       dispatch({ type: 'ADD_MESSAGE', payload: aiMessage });
 
-      // Save chat history
+      // Update session with new messages
       if (currentSession) {
-        const updatedMessages = [...state.messages, updatedUserMessage, aiMessage];
-        await StorageService.saveChatHistory(currentSession.id, updatedMessages);
+        const updatedSession = {
+          ...currentSession,
+          messages: [...state.messages, updatedUserMessage, aiMessage],
+          lastUpdated: Date.now(),
+        };
+
+        // Save to storage and update state
+        await StorageService.saveSession(updatedSession);
+        setCurrentSession(updatedSession);
       }
 
     } catch (error) {
@@ -103,28 +107,37 @@ export const ChatInput = memo(function ChatInput({ sessionLanguage }: ChatInputP
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [inputText, state.messages, currentScenario, sessionLanguage, currentSession, dispatch]);
+  }, [
+    inputText, 
+    state.messages, 
+    currentScenario, 
+    sessionLanguage, 
+    currentSession, 
+    dispatch, 
+    setCurrentSession,
+    disabled
+  ]);
 
   return (
     <View style={styles.container}>
       <TextInput
-        style={styles.input}
+        style={[styles.input, disabled && styles.inputDisabled]}
         value={inputText}
         onChangeText={setInputText}
-        placeholder="Type a message..."
+        placeholder={disabled ? "Chat ended" : "Type a message..."}
         placeholderTextColor="#999"
         maxLength={1000}
-        editable={!state.isLoading}
+        editable={!state.isLoading && !disabled}
         multiline
         onSubmitEditing={handleSend}
         blurOnSubmit={false}
       />
       <Pressable
         onPress={handleSend}
-        disabled={!inputText.trim() || state.isLoading}
+        disabled={!inputText.trim() || state.isLoading || disabled}
         style={({ pressed }) => [
           styles.sendButton,
-          (!inputText.trim() || state.isLoading) && styles.sendButtonDisabled,
+          (!inputText.trim() || state.isLoading || disabled) && styles.sendButtonDisabled,
           pressed && styles.sendButtonPressed
         ]}
       >
@@ -156,6 +169,10 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     marginRight: 8,
     fontSize: 16,
+  },
+  inputDisabled: {
+    backgroundColor: '#F8F9FA',
+    color: '#999',
   },
   sendButton: {
     height: 36,
