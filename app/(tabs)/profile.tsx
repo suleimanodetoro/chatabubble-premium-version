@@ -8,6 +8,8 @@ import { ThemedText } from '@/components/ThemedText';
 import { useAppStore } from '@/hooks/useAppStore';
 import { Language } from '@/types';
 import { supabase } from '@/lib/supabase/client';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -168,7 +170,9 @@ export default function ProfileScreen() {
   };
 
   return (
+    <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
     <ThemedView style={styles.container}>
+
       <ThemedView style={styles.header}>
         <ThemedText style={styles.email}>
           {user?.email || 'Guest User'}
@@ -312,6 +316,8 @@ export default function ProfileScreen() {
         </View>
       </Modal>
     </ThemedView>
+    </SafeAreaView>
+
   );
 }
 

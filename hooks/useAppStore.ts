@@ -54,40 +54,51 @@ export const useAppStore = create<AppState>()(
           return { scenarios: [...state.scenarios, scenario] };
         }),
 
-      saveSession: async (session) => {
-        console.log("Saving session:", session);
-        try {
-          // Save using StorageService first
-          await StorageService.saveSession(session);
-          
-          // Then update store state
-          set((state) => ({
-            activeSessions: {
-              ...state.activeSessions,
-              [session.id]: session,
-            },
-            currentSession: session,
-            targetLanguage: session.targetLanguage,
-          }));
-        } catch (error) {
-          console.error("Error saving session:", error);
-          throw error;
-        }
-      },
+        saveSession: async (session) => {
+          console.log("Saving session:", session);
+          try {
+            // Make sure we have the latest messages
+            const messages = await StorageService.loadChatHistory(session.id);
+            const sessionToSave = {
+              ...session,
+              messages,
+              lastUpdated: Date.now()
+            };
+            
+            // Save using StorageService first
+            await StorageService.saveSession(sessionToSave);
+            
+            // Then update store state
+            set((state) => ({
+              activeSessions: {
+                ...state.activeSessions,
+                [session.id]: sessionToSave,
+              },
+              currentSession: sessionToSave,
+              targetLanguage: session.targetLanguage,
+            }));
+          } catch (error) {
+            console.error("Error saving session:", error);
+            throw error;
+          }
+        },
 
       loadSession: async (sessionId) => {
         try {
+          console.log('Loading session from storage:', sessionId);
           // Try loading from StorageService first
           const storedSession = await StorageService.loadSession(sessionId);
           
           if (storedSession) {
+            console.log('Found stored session with messages:', storedSession.messages?.length);
             // Update store state with loaded session
             set((state) => ({
               activeSessions: {
                 ...state.activeSessions,
                 [sessionId]: storedSession,
               },
-              targetLanguage: storedSession.targetLanguage,
+              currentSession: storedSession,  // Added line
+              targetLanguage: storedSession.targetLanguage, // Added line
             }));
             return storedSession;
           }

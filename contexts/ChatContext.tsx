@@ -5,6 +5,8 @@ import { StorageService } from '@/lib/services/storage';
 import { SyncService } from '@/lib/services/sync';
 import { MetricsService } from '@/lib/services/metrics';
 import { useAppStore } from '@/hooks/useAppStore';
+import { supabase } from '@/lib/supabase/client';
+import NetInfo from '@react-native-community/netinfo';
 
 type ChatState = {
   messages: ChatMessage[];
@@ -12,6 +14,7 @@ type ChatState = {
   editingMessageId: string | null;
   sessionId: string | null;
   status: 'active' | 'completed' | 'saved';
+  syncStatus: 'idle' | 'syncing' | 'synced' | 'error';
 };
 
 type ChatAction =
@@ -21,7 +24,8 @@ type ChatAction =
   | { type: 'SET_EDITING'; payload: string | null }
   | { type: 'SET_SESSION'; payload: string }
   | { type: 'SET_STATUS'; payload: 'active' | 'completed' | 'saved' }
-  | { type: 'LOAD_MESSAGES'; payload: ChatMessage[] };
+  | { type: 'LOAD_MESSAGES'; payload: ChatMessage[] }
+  | { type: 'SYNC_STATUS'; payload: 'idle' | 'syncing' | 'synced' | 'error' };
 
 const initialState: ChatState = {
   messages: [],
@@ -29,60 +33,95 @@ const initialState: ChatState = {
   editingMessageId: null,
   sessionId: null,
   status: 'active',
+  syncStatus: 'idle',
 };
 
-function chatReducer(state: ChatState, action: ChatAction): ChatState {
+const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
   switch (action.type) {
     case 'ADD_MESSAGE':
+      const newMessages = [...state.messages, action.payload];
+      
+      // Save messages immediately when adding new ones
+      if (state.sessionId) {
+        StorageService.saveChatHistory(state.sessionId, newMessages)
+          .catch(error => console.error('Error saving new message:', error));
+      }
+
       return {
         ...state,
-        messages: [...state.messages, action.payload],
+        messages: newMessages,
       };
-    case 'UPDATE_MESSAGE':
-      return {
-        ...state,
-        messages: state.messages.map(msg =>
+
+      case 'UPDATE_MESSAGE':
+        const messageIndex = state.messages.findIndex(msg => msg.id === action.payload.id);
+        if (messageIndex === -1) return state;
+      
+        // Remove all messages after the edited one
+        const updatedMessages = state.messages.slice(0, messageIndex + 1).map(msg =>
           msg.id === action.payload.id
             ? { ...msg, ...action.payload.message }
             : msg
-        ),
-      };
+        );
+      
+        // Save the updated messages
+        if (state.sessionId) {
+          StorageService.saveChatHistory(state.sessionId, updatedMessages)
+            .catch(error => console.error('Error saving edited message:', error));
+        }
+      
+        return {
+          ...state,
+          messages: updatedMessages,
+        };
+
     case 'SET_LOADING':
       return {
         ...state,
         isLoading: action.payload,
       };
+
     case 'SET_EDITING':
       return {
         ...state,
         editingMessageId: action.payload,
       };
+
     case 'SET_SESSION':
       return {
         ...state,
         sessionId: action.payload,
         status: 'active',
       };
+
     case 'SET_STATUS':
       return {
         ...state,
         status: action.payload,
       };
+
     case 'LOAD_MESSAGES':
       return {
         ...state,
         messages: action.payload,
       };
+
+    case 'SYNC_STATUS':
+      return {
+        ...state,
+        syncStatus: action.payload
+      };
+
     default:
       return state;
   }
-}
+};
 
 interface ChatContextValue {
   state: ChatState;
   dispatch: React.Dispatch<ChatAction>;
   completeSession: () => Promise<void>;
   saveSession: () => Promise<void>;
+  syncStatus: ChatState['syncStatus'];
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -99,15 +138,129 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setCurrentSession,
   } = useAppStore();
 
-  // Primary effect for saving messages - keep this simple and reliable
+  // Network status effect
   useEffect(() => {
-    if (state.sessionId && state.messages.length > 0) {
-      StorageService.saveChatHistory(state.sessionId, state.messages)
-        .catch(error => console.error('Error saving chat history:', error));
-    }
-  }, [state.messages, state.sessionId]);
+    const unsubscribe = NetInfo.addEventListener(state => {
+      if (state.isConnected && currentSession?.status !== 'active') {
+        syncWithSupabase();
+      }
+    });
 
-  // Separate effect for session management
+    return () => unsubscribe();
+  }, [currentSession]);
+
+  // Realtime subscription effect
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const subscription = supabase
+      .channel('chat_updates')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'chat_sessions',
+        filter: `user_id=eq.${user.id}`
+      }, async (payload) => {
+        if (payload.new.id === state.sessionId) {
+          await handleRemoteUpdate(payload.new as Session);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [user?.id, state.sessionId]);
+
+  const handleRemoteUpdate = async (remoteSession: Session) => {
+    const localSession = await StorageService.loadSession(remoteSession.id);
+    
+    if (!localSession || remoteSession.lastUpdated > localSession.lastUpdated) {
+      await StorageService.saveSession(remoteSession);
+      dispatch({ type: 'LOAD_MESSAGES', payload: remoteSession.messages });
+      setCurrentSession(remoteSession);
+    }
+  };
+
+  const syncWithSupabase = async () => {
+    if (!state.sessionId || !currentSession) return;
+
+    try {
+      dispatch({ type: 'SYNC_STATUS', payload: 'syncing' });
+      await SyncService.syncChatSession(currentSession);
+      dispatch({ type: 'SYNC_STATUS', payload: 'synced' });
+    } catch (error) {
+      console.error('Sync error:', error);
+      dispatch({ type: 'SYNC_STATUS', payload: 'error' });
+    }
+  };
+
+  const completeSession = async () => {
+    if (!state.sessionId || !currentScenario) return;
+
+    try {
+      dispatch({ type: 'SET_STATUS', payload: 'completed' });
+      
+      const session: Session = {
+        id: state.sessionId,
+        userId: user?.id || 'guest',
+        scenarioId: currentScenario.id,
+        sourceLanguage: sourceLanguage || { code: 'en', name: 'English', direction: 'ltr' },
+        targetLanguage: targetLanguage || currentScenario.targetLanguage,
+        messages: state.messages,
+        startTime: currentSession?.startTime || Date.now(),
+        lastUpdated: Date.now(),
+        status: 'completed',
+        scenario: currentScenario,
+        metrics: {
+          messageCount: state.messages.length,
+          duration: Date.now() - (currentSession?.startTime || Date.now()),
+        },
+      };
+
+      await StorageService.saveSession(session);
+      await SyncService.syncChatSession(session).catch(e => console.error('Sync error:', e));
+      await MetricsService.updateSessionMetrics(session).catch(e => console.error('Metrics error:', e));
+      setCurrentSession(session);
+    } catch (error) {
+      console.error('Error completing session:', error);
+      dispatch({ type: 'SET_STATUS', payload: 'active' });
+    }
+  };
+
+  const saveSession = async () => {
+    if (!state.sessionId || !currentScenario) return;
+
+    try {
+      dispatch({ type: 'SET_STATUS', payload: 'saved' });
+      
+      const session: Session = {
+        id: state.sessionId,
+        userId: user?.id || 'guest',
+        scenarioId: currentScenario.id,
+        sourceLanguage: sourceLanguage || { code: 'en', name: 'English', direction: 'ltr' },
+        targetLanguage: targetLanguage || currentScenario.targetLanguage,
+        messages: state.messages,
+        startTime: currentSession?.startTime || Date.now(),
+        lastUpdated: Date.now(),
+        status: 'saved',
+        scenario: currentScenario,
+        metrics: {
+          messageCount: state.messages.length,
+          duration: Date.now() - (currentSession?.startTime || Date.now()),
+        },
+      };
+
+      await StorageService.saveSession(session);
+      await syncWithSupabase();
+      setCurrentSession(session);
+    } catch (error) {
+      console.error('Error saving session:', error);
+      dispatch({ type: 'SET_STATUS', payload: 'active' });
+    }
+  };
+
+  // Effect for session management
   useEffect(() => {
     if (!state.sessionId || !currentScenario || !state.messages.length) return;
 
@@ -140,75 +293,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     updateSession();
   }, [state.status, state.sessionId]);
 
-  const completeSession = async () => {
-    if (!state.sessionId || !currentScenario) return;
-
-    try {
-      dispatch({ type: 'SET_STATUS', payload: 'completed' });
-      
-      const session: Session = {
-        id: state.sessionId,
-        userId: user?.id || 'guest',
-        scenarioId: currentScenario.id,
-        sourceLanguage: sourceLanguage || { code: 'en', name: 'English', direction: 'ltr' },
-        targetLanguage: targetLanguage || currentScenario.targetLanguage,
-        messages: state.messages,
-        startTime: currentSession?.startTime || Date.now(),
-        lastUpdated: Date.now(),
-        status: 'completed',
-        scenario: currentScenario,
-        metrics: {
-          messageCount: state.messages.length,
-          duration: Date.now() - (currentSession?.startTime || Date.now()),
-        },
-      };
-
-      await StorageService.saveSession(session);
-      await SyncService.syncChatSession(session).catch(e => console.error('Sync error:', e));
-      await MetricsService.updateSessionMetrics(session).catch(e => console.error('Metrics error:', e));
-      setCurrentSession(session);
-    } catch (error) {
-      console.error('Error completing session:', error);
-      // Revert status if completion fails
-      dispatch({ type: 'SET_STATUS', payload: 'active' });
-    }
-  };
-
-  const saveSession = async () => {
-    if (!state.sessionId || !currentScenario) return;
-
-    try {
-      dispatch({ type: 'SET_STATUS', payload: 'saved' });
-      
-      const session: Session = {
-        id: state.sessionId,
-        userId: user?.id || 'guest',
-        scenarioId: currentScenario.id,
-        sourceLanguage: sourceLanguage || { code: 'en', name: 'English', direction: 'ltr' },
-        targetLanguage: targetLanguage || currentScenario.targetLanguage,
-        messages: state.messages,
-        startTime: currentSession?.startTime || Date.now(),
-        lastUpdated: Date.now(),
-        status: 'saved',
-        scenario: currentScenario,
-        metrics: {
-          messageCount: state.messages.length,
-          duration: Date.now() - (currentSession?.startTime || Date.now()),
-        },
-      };
-
-      await StorageService.saveSession(session);
-      await SyncService.syncChatSession(session).catch(e => console.error('Sync error:', e));
-      setCurrentSession(session);
-    } catch (error) {
-      console.error('Error saving session:', error);
-      // Revert status if save fails
-      dispatch({ type: 'SET_STATUS', payload: 'active' });
-    }
-  };
-
   return (
-    <ChatContext.Provider value={{ state, dispatch, completeSession, saveSession }}>
+    <ChatContext.Provider value={{ 
+      state, 
+      dispatch, 
+      completeSession, 
+      saveSession,
+      syncStatus: state.syncStatus 
+    }}>
       {children}
     </ChatContext.Provider>
   );

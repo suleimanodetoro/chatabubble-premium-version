@@ -101,8 +101,8 @@ export default function CreateScenarioScreen() {
   ]);
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-      <KeyboardAvoidingView 
+<SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+<KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.container}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}

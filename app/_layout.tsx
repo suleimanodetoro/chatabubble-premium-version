@@ -1,4 +1,5 @@
 // app/_layout.tsx
+import 'react-native-get-random-values';
 import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { useRouter, useSegments } from 'expo-router';
@@ -14,23 +15,6 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const { setUser } = useAppStore();
-
-  // Check authentication state and redirect accordingly
-  useEffect(() => {
-    // Don't redirect when still loading
-    if (isLoading) return;
-
-    const inAuthGroup = segments[0] === '(auth)';
-    const inProtectedRoute = !inAuthGroup;
-
-    if (!session && inProtectedRoute) {
-      // No session but trying to access protected route
-      router.replace('/(auth)/login');
-    } else if (session && inAuthGroup) {
-      // Have session but still in auth group
-      router.replace('/(tabs)');
-    }
-  }, [session, segments, isLoading]);
 
   // Initialize and monitor auth state
   useEffect(() => {
@@ -49,56 +33,62 @@ export default function RootLayout() {
       setUser(session?.user ?? null);
       
       if (!session) {
-        // Reset any app state here if needed
+        // Optional: Reset any app state here if needed
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
+  // Redirect based on authentication state
+  useEffect(() => {
+    if (isLoading) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+    const inProtectedRoute = !inAuthGroup;
+
+    if (!session && inProtectedRoute) {
+      // No session but trying to access protected route
+      router.replace('/(auth)/login');
+    } else if (session && inAuthGroup) {
+      // Have session but still in auth group
+      router.replace('/(tabs)');
+    }
+  }, [session, segments, isLoading]);
+
   if (isLoading) {
     return null; // Or a loading screen
   }
 
-  return (
-    <Stack
-      screenOptions={{
-        headerStyle: {
-          backgroundColor: colorScheme === 'dark' ? '#000' : '#fff',
-        },
-        headerTintColor: colorScheme === 'dark' ? '#fff' : '#000',
-        headerShadowVisible: false,
-      }}
-    >
-      {!session ? (
-        <Stack.Screen
-          name="(auth)"
-          options={{
-            headerShown: false,
-          }}
-        />
-      ) : (
-        <>
-          <Stack.Screen
-            name="(tabs)"
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="(chat)"
-            options={{
-              headerShown: false,
-              presentation: 'fullScreenModal',
-            }}
-          />
-          <Stack.Screen
-            name="create-scenario"
-            options={{
-              presentation: 'modal',
-              title: 'Create Scenario'
-            }}
-          />
-        </>
-      )}
+  const commonStackOptions = {
+    headerStyle: {
+      backgroundColor: colorScheme === 'dark' ? '#000' : '#fff',
+    },
+    headerShown: false,
+    headerTintColor: colorScheme === 'dark' ? '#fff' : '#000',
+    headerShadowVisible: false,
+  };
+
+  return !session ? (
+    <Stack screenOptions={commonStackOptions}>
+      <Stack.Screen name="(auth)" />
+    </Stack>
+  ) : (
+    <Stack screenOptions={commonStackOptions}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen
+        name="(chat)"
+        options={{
+          presentation: 'fullScreenModal',
+        }}
+      />
+      <Stack.Screen
+        name="create-scenario"
+        options={{
+          presentation: 'modal',
+          title: 'Create Scenario',
+        }}
+      />
     </Stack>
   );
 }

@@ -9,6 +9,7 @@ import { Collapsible } from "../../components/Collapsible";
 import { useAppStore } from "../../hooks/useAppStore";
 import { Scenario, Session } from "../../types";
 import { generateId } from "@/lib/utils/ids";
+import { StorageService } from "@/lib/services/storage";
 
 
 export default function ScenariosScreen() {
@@ -21,45 +22,75 @@ export default function ScenariosScreen() {
     sourceLanguage,
   } = useAppStore();
 
-  const handleScenarioPress = (scenario: Scenario) => {
-    console.log('Pressing scenario:', scenario);
-    
-    if (!sourceLanguage || !scenario.targetLanguage) {
-      console.log('Missing languages:', { sourceLanguage, targetLanguage: scenario.targetLanguage });
-      Alert.alert(
-        "Language Selection Required",
-        "This scenario doesn't have a target language set"
+  const handleScenarioPress = async (scenario: Scenario) => {
+  console.log('Pressing scenario:', scenario);
+  
+  if (!sourceLanguage || !scenario.targetLanguage) {
+    console.log('Missing languages:', { sourceLanguage, targetLanguage: scenario.targetLanguage });
+    Alert.alert(
+      "Language Selection Required",
+      "This scenario doesn't have a target language set"
+    );
+    return;
+  }
+
+  try {
+    // First, check for existing active sessions for this scenario
+    const existingSessions = Object.values(useAppStore.getState().activeSessions)
+      .filter(session => 
+        session.scenarioId === scenario.id && 
+        session.status !== 'completed'
       );
-      return;
+
+    let sessionToUse: Session;
+    let messages: ChatMessage[] = [];
+
+    if (existingSessions.length > 0) {
+      // Use the most recent session
+      sessionToUse = existingSessions.sort((a, b) => b.lastUpdated - a.lastUpdated)[0];
+      console.log('Using existing session:', sessionToUse.id);
+      
+      // Load messages for existing session
+      messages = await StorageService.loadChatHistory(sessionToUse.id);
+      console.log('Loaded existing messages:', messages.length);
+      
+      sessionToUse = {
+        ...sessionToUse,
+        messages,
+        lastUpdated: Date.now()
+      };
+    } else {
+      // Create new session only if no existing one found
+      const sessionId = generateId();
+      console.log('Creating new session:', sessionId);
+      
+      sessionToUse = {
+        id: sessionId,
+        userId: "guest",
+        scenarioId: scenario.id,
+        targetLanguage: scenario.targetLanguage,
+        sourceLanguage,
+        messages: [],
+        startTime: Date.now(),
+        lastUpdated: Date.now(),
+        scenario: scenario,
+        status: 'active'
+      };
     }
-  
-    // Use scenario ID directly for consistent session handling
-    const sessionId = generateId();
-    console.log('Using session ID:', sessionId);
-  
-    // Create new session
-    const newSession: Session = {
-      id: sessionId,
-      userId: "guest",
-      scenarioId: scenario.id,
-      targetLanguage: scenario.targetLanguage,
-      sourceLanguage,
-      messages: [],
-      startTime: Date.now(),
-      lastUpdated: Date.now(),
-      scenario: scenario,
-    };
-  
-    console.log('Creating/updating session:', newSession);
+
     setCurrentScenario(scenario);
-    setCurrentSession(newSession);
-    saveSession(newSession);
-  
+    setCurrentSession(sessionToUse);
+    await saveSession(sessionToUse);
+
     router.push({
       pathname: "/(chat)/[id]",
-      params: { id: sessionId },
+      params: { id: sessionToUse.id },
     });
-  };
+  } catch (error) {
+    console.error('Error handling scenario press:', error);
+    Alert.alert('Error', 'Failed to load scenario');
+  }
+};
 
   const handleCreateScenario = () => {
     router.push("/create-scenario");
@@ -124,7 +155,7 @@ export default function ScenariosScreen() {
   );
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView useSafeArea style={styles.container}>
       <ThemedView style={styles.header}>
         <ThemedText style={styles.headerTitle}>Language Scenarios</ThemedText>
         <ThemedText style={styles.headerSubtitle}>

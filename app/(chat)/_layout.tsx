@@ -5,8 +5,8 @@ import { ChatProvider } from '../../contexts/ChatContext';
 export default function ChatLayout() {
   return (
     <ChatProvider>
-      <Stack>
-        <Stack.Screen
+      <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen
           name="[id]"
           options={{
             title: "Chat",
