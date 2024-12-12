@@ -1,13 +1,12 @@
 // lib/services/sync.ts
 import { supabase } from '@/lib/supabase/client';
 import { Session } from '@/types';
-import { StorageService } from './storage';
 
 export class SyncService {
-  static async syncChatSession(session: Session) {
+  static async syncChatSession(session: Session): Promise<{ success: boolean; shouldDeleteLocal: boolean }> {
     try {
       if (session.status !== 'completed' && session.status !== 'saved') {
-        return;
+        return { success: false, shouldDeleteLocal: false };
       }
 
       const { error } = await supabase
@@ -29,13 +28,13 @@ export class SyncService {
 
       if (error) throw error;
 
-      // Use the correct method name
-      if (session.status === 'completed') {
-        await StorageService.deleteSession(session.id);
-      }
+      return { 
+        success: true, 
+        shouldDeleteLocal: session.status === 'completed' 
+      };
     } catch (error) {
       console.error('Error syncing chat session:', error);
-      throw error;
+      return { success: false, shouldDeleteLocal: false };
     }
   }
 

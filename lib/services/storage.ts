@@ -6,51 +6,114 @@ import { SyncService } from './sync';
 const CHAT_HISTORY_KEY = '@chat_history:';
 const ACTIVE_SESSIONS_KEY = '@active_sessions:';
 const MAX_LOCAL_SESSIONS = 10;
+const MAX_CHUNK_SIZE = 512 * 1024; // 512KB chunks for iOS
 
 export class StorageService {
-  // Save chat messages for a session
+  private static async saveWithChunking(key: string, value: string) {
+    try {
+      // If data is small enough, save directly
+      if (value.length < MAX_CHUNK_SIZE) {
+        await AsyncStorage.setItem(key, value);
+        return;
+      }
+
+      // Split into chunks
+      const chunks = Math.ceil(value.length / MAX_CHUNK_SIZE);
+      const chunkPromises = [];
+
+      for (let i = 0; i < chunks; i++) {
+        const chunk = value.slice(i * MAX_CHUNK_SIZE, (i + 1) * MAX_CHUNK_SIZE);
+        const chunkKey = `${key}_chunk_${i}`;
+        chunkPromises.push(AsyncStorage.setItem(chunkKey, chunk));
+      }
+
+      // Save chunk metadata
+      await Promise.all([
+        ...chunkPromises,
+        AsyncStorage.setItem(`${key}_chunks`, chunks.toString())
+      ]);
+    } catch (error) {
+      console.error('Error in saveWithChunking:', error);
+      throw error;
+    }
+  }
+
+  private static async loadWithChunking(key: string): Promise<string | null> {
+    try {
+      // Check if data was chunked
+      const chunksStr = await AsyncStorage.getItem(`${key}_chunks`);
+      
+      // If no chunks metadata, try regular load
+      if (!chunksStr) {
+        return AsyncStorage.getItem(key);
+      }
+
+      // Load all chunks
+      const chunks = parseInt(chunksStr);
+      const chunkPromises = [];
+
+      for (let i = 0; i < chunks; i++) {
+        const chunkKey = `${key}_chunk_${i}`;
+        chunkPromises.push(AsyncStorage.getItem(chunkKey));
+      }
+
+      const loadedChunks = await Promise.all(chunkPromises);
+      return loadedChunks.join('');
+    } catch (error) {
+      console.error('Error in loadWithChunking:', error);
+      throw error;
+    }
+  }
+
   static async saveChatHistory(sessionId: string, messages: ChatMessage[]) {
     try {
+      console.log('Saving chat history for session:', sessionId);
       const key = `${CHAT_HISTORY_KEY}${sessionId}`;
-      await AsyncStorage.setItem(key, JSON.stringify(messages));
-      console.log('Chat history saved for session:', sessionId);
+      const value = JSON.stringify(messages);
+      await this.saveWithChunking(key, value);
+      console.log('Chat history saved successfully');
     } catch (error) {
       console.error('Error saving chat history:', error);
       throw error;
     }
   }
 
-  // Load chat messages for a session
   static async loadChatHistory(sessionId: string): Promise<ChatMessage[]> {
     try {
       const key = `${CHAT_HISTORY_KEY}${sessionId}`;
-      const history = await AsyncStorage.getItem(key);
-      return history ? JSON.parse(history) : [];
+      const data = await this.loadWithChunking(key);
+      return data ? JSON.parse(data) : [];
     } catch (error) {
       console.error('Error loading chat history:', error);
-      throw error;
+      return []; // Return empty array instead of throwing
     }
   }
 
-  // Save entire session data
   static async saveSession(session: Session) {
     try {
-      // Save to local storage
+      console.log('Starting to save session:', session.id);
+      
+      // Save session data
       const sessionKey = `${ACTIVE_SESSIONS_KEY}${session.id}`;
-      await AsyncStorage.setItem(sessionKey, JSON.stringify(session));
-
-      // Also save messages separately for quick access
+      const sessionData = JSON.stringify(session);
+      await this.saveWithChunking(sessionKey, sessionData);
+      
+      // Save messages separately
       await this.saveChatHistory(session.id, session.messages);
 
-      // If session is completed or saved, sync to Supabase
+      // Handle sync if needed
       if (session.status === 'completed' || session.status === 'saved') {
         await SyncService.syncChatSession(session);
       }
 
-      // Cleanup old sessions if needed
       await this.cleanupOldSessions();
+      console.log('Session saved successfully');
     } catch (error) {
-      console.error('Error saving session:', error);
+      console.error('Detailed save session error:', {
+        error,
+        sessionId: session.id,
+        messageCount: session.messages?.length || 0
+      });
       throw error;
     }
   }
@@ -131,6 +194,16 @@ export class StorageService {
       }
     } catch (error) {
       console.error('Error cleaning up old sessions:', error);
+    }
+  }
+  static async clearAll() {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      await AsyncStorage.multiRemove(keys);
+      console.log('All storage cleared');
+    } catch (error) {
+      console.error('Error clearing storage:', error);
+      throw error;
     }
   }
 }
