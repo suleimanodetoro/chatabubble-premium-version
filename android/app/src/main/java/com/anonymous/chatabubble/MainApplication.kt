@@ -1,4 +1,4 @@
-package com.suleimanao.chatabubble
+package com.anonymous.chatabubble
 
 import android.app.Application
 import android.content.res.Configuration
