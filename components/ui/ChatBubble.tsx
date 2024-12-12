@@ -9,22 +9,24 @@ import { OpenAIService } from "../../lib/services/openai";
 import { useAppStore } from "../../hooks/useAppStore";
 import { SpeechService } from "@/lib/services/speech";
 import { Ionicons } from '@expo/vector-icons';
+import { generateId } from '@/lib/utils/ids';
+import { StorageService } from '@/lib/services/storage';
 
 export const ChatBubble = memo(function ChatBubble({
   message,
 }: {
   message: ChatMessage;
 }) {
-  const { dispatch } = useChatContext();
-
+  const { state, dispatch } = useChatContext();
   const sourceLanguage = useAppStore((state) => state.sourceLanguage);
   const currentSession = useAppStore((state) => state.currentSession);
   const targetLanguage = useAppStore((state) => state.targetLanguage);
+  const currentScenario = useAppStore((state) => state.currentScenario);
+  const setCurrentSession = useAppStore((state) => state.setCurrentSession);
 
   const [isSpeaking, setIsSpeaking] = useState(false);
   const isUser = message.sender === "user";
 
-  // Cleanup speech on unmount
   useEffect(() => {
     return () => {
       if (isSpeaking) {
@@ -32,19 +34,6 @@ export const ChatBubble = memo(function ChatBubble({
       }
     };
   }, [isSpeaking]);
-
-  const backgroundColor = useThemeColor(
-    {
-      light: isUser ? "#007AFF" : "#E9ECEF",
-      dark: isUser ? "#0A84FF" : "#2C2C2E",
-    },
-    "background"
-  );
-
-  const textColor = useThemeColor(
-    { light: isUser ? "#FFFFFF" : "#000000", dark: "#FFFFFF" },
-    "text"
-  );
 
   const handleSpeak = useCallback(async () => {
     if (isSpeaking) {
@@ -81,7 +70,10 @@ export const ChatBubble = memo(function ChatBubble({
 
   const handleEdit = useCallback(
     async (editType: "original" | "translation") => {
-      if (!targetLanguage) return;
+      if (!targetLanguage || !currentScenario) {
+        console.log('Missing targetLanguage or currentScenario:', { targetLanguage, currentScenario });
+        return;
+      }
 
       const textToEdit =
         editType === "original" ? message.content.original : message.content.translated;
@@ -90,11 +82,7 @@ export const ChatBubble = memo(function ChatBubble({
         "Edit Message",
         `Edit ${editType === "original" ? "message" : "translation"}:`,
         [
-          {
-            text: "Cancel",
-            style: "cancel",
-            onPress: () => {},
-          },
+          { text: "Cancel", style: "cancel" },
           {
             text: "Save",
             onPress: async (newText?: string) => {
@@ -103,26 +91,122 @@ export const ChatBubble = memo(function ChatBubble({
               dispatch({ type: "SET_LOADING", payload: true });
 
               try {
-                const translationResult = await OpenAIService.translateText(
-                  newText,
-                  editType === "original" ? targetLanguage.name : "English"
-                );
+                // Get the index of the current message
+                const messageIndex = state.messages.findIndex(m => m.id === message.id);
+                if (messageIndex === -1) return;
 
-                dispatch({
-                  type: "UPDATE_MESSAGE",
-                  payload: {
-                    id: message.id,
-                    message: {
+                let updatedMessage;
+
+                if (message.sender === 'assistant') {
+                  if (editType === 'translation') {
+                    // If editing English translation of AI message, translate to target language
+                    const newOriginal = await OpenAIService.translateText(
+                      newText,
+                      targetLanguage.name
+                    );
+                    updatedMessage = {
+                      ...message,
                       content: {
-                        original: editType === "original" ? newText : translationResult,
-                        translated: editType === "original" ? translationResult : newText,
+                        original: newOriginal,  // New translated target language
+                        translated: newText,    // User's edited English
                       },
                       isEdited: true,
+                    };
+                  } else {
+                    // If editing target language of AI message, translate to English
+                    const newTranslation = await OpenAIService.translateText(
+                      newText,
+                      'English'
+                    );
+                    updatedMessage = {
+                      ...message,
+                      content: {
+                        original: newText,        // User's edited target language
+                        translated: newTranslation, // New English translation
+                      },
+                      isEdited: true,
+                    };
+                  }
+                } else {
+                  // Original user message handling
+                  const translationResult = await OpenAIService.translateText(
+                    newText,
+                    editType === "original" ? targetLanguage.name : "English"
+                  );
+
+                  updatedMessage = {
+                    ...message,
+                    content: {
+                      original: editType === "original" ? newText : translationResult,
+                      translated: editType === "original" ? translationResult : newText,
                     },
-                  },
+                    isEdited: true,
+                  };
+                }
+
+                // Update messages list
+                const newMessageList = state.messages.slice(0, messageIndex + 1);
+                newMessageList[messageIndex] = updatedMessage;
+
+                // Dispatch update
+                dispatch({
+                  type: 'LOAD_MESSAGES',
+                  payload: newMessageList
                 });
+
+                // Save the updated messages to storage
+                if (currentSession) {
+                  const updatedSession = {
+                    ...currentSession,
+                    messages: newMessageList,
+                    lastUpdated: Date.now(),
+                  };
+                  await StorageService.saveSession(updatedSession);
+                  setCurrentSession(updatedSession);
+                }
+
+                // Only generate new AI response for user message edits
+                if (message.sender === 'user') {
+                  const aiResponse = await OpenAIService.generateChatCompletion(
+                    newMessageList,
+                    currentScenario,
+                    targetLanguage.name
+                  );
+
+                  const translatedResponse = await OpenAIService.translateText(
+                    aiResponse,
+                    'English'
+                  );
+
+                  const newAiMessage = {
+                    id: generateId(),
+                    content: {
+                      original: aiResponse,
+                      translated: translatedResponse
+                    },
+                    sender: 'assistant',
+                    timestamp: Date.now(),
+                    isEdited: false
+                  };
+
+                  // Add AI response and update storage again
+                  const finalMessageList = [...newMessageList, newAiMessage];
+                  dispatch({ type: 'ADD_MESSAGE', payload: newAiMessage });
+
+                  if (currentSession) {
+                    const finalSession = {
+                      ...currentSession,
+                      messages: finalMessageList,
+                      lastUpdated: Date.now(),
+                    };
+                    await StorageService.saveSession(finalSession);
+                    setCurrentSession(finalSession);
+                  }
+                }
+
               } catch (error) {
-                Alert.alert("Error", "Failed to save edit");
+                console.error('Edit error:', error);
+                Alert.alert("Error", "Failed to save edit: " + (error as Error).message);
               } finally {
                 dispatch({ type: "SET_LOADING", payload: false });
               }
@@ -133,7 +217,7 @@ export const ChatBubble = memo(function ChatBubble({
         textToEdit
       );
     },
-    [message.id, message.content, targetLanguage, dispatch]
+    [message, targetLanguage, dispatch, state.messages, currentScenario, currentSession, setCurrentSession]
   );
 
   const handleLongPress = useCallback(() => {
@@ -149,6 +233,19 @@ export const ChatBubble = memo(function ChatBubble({
       { text: "Cancel", style: "cancel" },
     ]);
   }, [handleEdit, isUser]);
+
+  const backgroundColor = useThemeColor(
+    {
+      light: isUser ? "#007AFF" : "#E9ECEF",
+      dark: isUser ? "#0A84FF" : "#2C2C2E",
+    },
+    "background"
+  );
+
+  const textColor = useThemeColor(
+    { light: isUser ? "#FFFFFF" : "#000000", dark: "#FFFFFF" },
+    "text"
+  );
 
   return (
     <Pressable onLongPress={handleLongPress}>

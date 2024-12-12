@@ -1,6 +1,6 @@
 // components/ui/ChatInput.tsx
 import { useState, useCallback, memo } from 'react';
-import { StyleSheet, TextInput, Pressable, View, Platform, Keyboard } from 'react-native';
+import { StyleSheet, TextInput, Pressable, View, Platform, Keyboard, Alert } from 'react-native';
 import { ThemedText } from '../ThemedText';
 import { useChatContext } from '../../contexts/ChatContext';
 import { useAppStore } from '../../hooks/useAppStore';
@@ -34,7 +34,7 @@ export const ChatInput = memo(function ChatInput({
     dispatch({ type: 'SET_LOADING', payload: true });
 
     try {
-      // Create user message
+      // Create initial user message
       const userMessage = {
         id: generateId(),
         content: {
@@ -48,15 +48,11 @@ export const ChatInput = memo(function ChatInput({
 
       dispatch({ type: 'ADD_MESSAGE', payload: userMessage });
 
-      // Get translations and AI response in parallel
-      const [translatedUserText, aiResponse] = await Promise.all([
-        OpenAIService.translateText(trimmedText, sessionLanguage.name),
-        OpenAIService.generateChatCompletion(
-          [...state.messages, userMessage],
-          currentScenario,
-          sessionLanguage.name
-        )
-      ]);
+      // First translate user message
+      const translatedUserText = await OpenAIService.translateText(
+        trimmedText, 
+        sessionLanguage.name
+      );
 
       // Update user message with translation
       const updatedUserMessage = {
@@ -75,12 +71,25 @@ export const ChatInput = memo(function ChatInput({
         }
       });
 
+      // Get AI response with updated messages
+      const aiResponse = await OpenAIService.generateChatCompletion(
+        [...state.messages, updatedUserMessage],
+        currentScenario,
+        sessionLanguage.name
+      );
+
+      // Translate AI response to English
+      const translatedAiResponse = await OpenAIService.translateText(
+        aiResponse, 
+        'English'
+      );
+
       // Create and add AI message
       const aiMessage = {
         id: generateId(),
         content: {
           original: aiResponse,
-          translated: await OpenAIService.translateText(aiResponse, 'English')
+          translated: translatedAiResponse
         },
         sender: 'assistant',
         timestamp: Date.now(),
@@ -89,7 +98,7 @@ export const ChatInput = memo(function ChatInput({
 
       dispatch({ type: 'ADD_MESSAGE', payload: aiMessage });
 
-      // Update session with new messages
+      // Update session
       if (currentSession) {
         const updatedSession = {
           ...currentSession,
@@ -97,13 +106,13 @@ export const ChatInput = memo(function ChatInput({
           lastUpdated: Date.now(),
         };
 
-        // Save to storage and update state
         await StorageService.saveSession(updatedSession);
         setCurrentSession(updatedSession);
       }
 
     } catch (error) {
       console.error('Message error:', error);
+      Alert.alert('Error', 'Failed to send message. Please try again.');
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
@@ -148,6 +157,7 @@ export const ChatInput = memo(function ChatInput({
     </View>
   );
 });
+
 
 const styles = StyleSheet.create({
   container: {
