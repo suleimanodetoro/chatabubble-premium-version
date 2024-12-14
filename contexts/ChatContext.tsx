@@ -7,6 +7,8 @@ import { MetricsService } from '@/lib/services/metrics';
 import { useAppStore } from '@/hooks/useAppStore';
 import { supabase } from '@/lib/supabase/client';
 import NetInfo from '@react-native-community/netinfo';
+import { ProfileService } from '@/lib/services/profile';
+
 
 type ChatState = {
   messages: ChatMessage[];
@@ -39,18 +41,20 @@ const initialState: ChatState = {
 const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
   switch (action.type) {
     case 'ADD_MESSAGE':
-      const newMessages = [...state.messages, action.payload];
-      
-      // Save messages immediately when adding new ones
-      if (state.sessionId) {
-        StorageService.saveChatHistory(state.sessionId, newMessages)
-          .catch(error => console.error('Error saving new message:', error));
-      }
+  console.log('Adding message to state:', action.payload);
+  const newMessages = [...state.messages, action.payload];
+  console.log('New messages length:', newMessages.length);
+  
+  // Save messages immediately when adding new ones
+  if (state.sessionId) {
+    StorageService.saveChatHistory(state.sessionId, newMessages)
+      .catch(error => console.error('Error saving new message:', error));
+  }
 
-      return {
-        ...state,
-        messages: newMessages,
-      };
+  return {
+    ...state,
+    messages: newMessages,
+  };
 
       case 'UPDATE_MESSAGE':
         const messageIndex = state.messages.findIndex(msg => msg.id === action.payload.id);
@@ -196,8 +200,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   };
 
   const completeSession = async () => {
-    if (!state.sessionId || !currentScenario) return;
-
+    if (!state.sessionId || !currentScenario || !state.messages.length) return;
+  
     try {
       dispatch({ type: 'SET_STATUS', payload: 'completed' });
       
@@ -211,20 +215,45 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         startTime: currentSession?.startTime || Date.now(),
         lastUpdated: Date.now(),
         status: 'completed',
-        scenario: currentScenario,
-        metrics: {
-          messageCount: state.messages.length,
-          duration: Date.now() - (currentSession?.startTime || Date.now()),
-        },
+        scenario: currentScenario
       };
-
+  
+      // Save locally first
       await StorageService.saveSession(session);
-      await SyncService.syncChatSession(session).catch(e => console.error('Sync error:', e));
-      await MetricsService.updateSessionMetrics(session).catch(e => console.error('Metrics error:', e));
+  
+      // Only sync with Supabase if we have a real user
+      if (user?.id) {
+        console.log('Syncing completed session to Supabase:', {
+          sessionId: session.id,
+          messageCount: session.messages.length
+        });
+        
+        await ChatService.completeSession(session.id, session.messages);
+        
+        // Update metrics after successful Supabase sync
+        await MetricsService.updateSessionMetrics(session);
+        
+        // Check if level up is needed
+        const stats = await MetricsService.getUserMetrics(user.id);
+        const currentProgress = stats.languageProgress[session.targetLanguage.code];
+        
+        if (currentProgress?.sessionsCompleted % 5 === 0) {
+          await ProfileService.updateProfile(user.id, {
+            current_levels: {
+              ...user.current_levels,
+              [session.targetLanguage.code]: currentProgress.sessionsCompleted > 20 ? 'advanced' :
+                                          currentProgress.sessionsCompleted > 10 ? 'intermediate' : 
+                                          'beginner'
+            }
+          });
+        }
+      }
+  
       setCurrentSession(session);
     } catch (error) {
       console.error('Error completing session:', error);
       dispatch({ type: 'SET_STATUS', payload: 'active' });
+      throw error; // Important: Throw the error so handleComplete can show the alert
     }
   };
 

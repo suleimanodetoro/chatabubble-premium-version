@@ -4,6 +4,11 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Language, Scenario, Session, User } from "../types";
 import { StorageService } from "@/lib/services/storage";
+import { ScenarioService } from "@/lib/services/scenario";
+import { supabase } from '@/lib/supabase/client';
+
+
+
 
 interface AppState {
   user: User | null;
@@ -13,6 +18,8 @@ interface AppState {
   sourceLanguage: Language | null;
   scenarios: Scenario[];
   activeSessions: Record<string, Session>;
+  loadScenarios: () => Promise<void>;
+
 
   // Actions
   setUser: (user: User | null) => void;
@@ -47,6 +54,7 @@ export const useAppStore = create<AppState>()(
       setCurrentScenario: (scenario) => set({ currentScenario: scenario }),
       setTargetLanguage: (language) => set({ targetLanguage: language }),
       setSourceLanguage: (language) => set({ sourceLanguage: language }),
+      
 
       addScenario: (scenario) =>
         set((state) => {
@@ -121,6 +129,32 @@ export const useAppStore = create<AppState>()(
           return null;
         }
       },
+      // In useAppStore.ts, modify the loadScenarios function:
+loadScenarios: async () => {
+  try {
+    const user = get().user;
+    if (!user?.id) return;
+
+    const { data: scenarios, error } = await supabase
+      .from('scenarios')
+      .select('*')
+      .or(`created_by.eq.${user.id},is_public.eq.true`);
+
+    if (error) throw error;
+
+    const transformedScenarios = scenarios.map(scenario => ({
+      ...scenario,
+      targetLanguage: scenario.target_language,
+      category: scenario.category,
+      difficulty: scenario.difficulty,
+      persona: scenario.persona,
+    }));
+
+    set({ scenarios: transformedScenarios });
+  } catch (error) {
+    console.error('Error loading scenarios:', error);
+  }
+},
     }),
     {
       name: "app-storage",
