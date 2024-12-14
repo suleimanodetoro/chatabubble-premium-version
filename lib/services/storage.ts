@@ -92,6 +92,8 @@ export class StorageService {
   static async saveSession(session: Session) {
     try {
       console.log('Starting to save session:', session.id);
+      console.log('SaveSession called with messages:', session.messages?.length);
+
       
       // Save session data
       const sessionKey = `${ACTIVE_SESSIONS_KEY}${session.id}`;
