@@ -17,6 +17,7 @@ import { LanguageSelector } from '@/components/ui/LanguageSelector';
 import { Scenario, Language } from '@/types';
 import { useAppStore } from '@/hooks/useAppStore';
 import { generateId } from '@/lib/utils/ids';
+import { ScenarioService } from '@/lib/services/scenario';
 
 
 export default function CreateScenarioScreen() {
@@ -30,10 +31,11 @@ export default function CreateScenarioScreen() {
   const [languageStyle, setLanguageStyle] = useState('casual');
   const [selectedLanguage, setSelectedLanguage] = useState<Language | undefined>();
   const [isLanguageSelectorVisible, setIsLanguageSelectorVisible] = useState(false);
+  const { addScenario, user } = useAppStore();
 
-  const { addScenario } = useAppStore();
 
-  const handleCreate = useCallback(() => {
+
+  const handleCreate = useCallback(async () => {
     console.log('Validating form...', {
       title,
       description,
@@ -64,41 +66,49 @@ export default function CreateScenarioScreen() {
     }
 
     try {
-      const newScenario: Scenario = {
-        id: generateId(),
-        title: title.trim(),
-        description: description.trim(),
-        category: category as 'shopping' | 'dining' | 'travel' | 'business' | 'casual',
-        difficulty: difficulty as 'beginner' | 'intermediate' | 'advanced',
-        persona: {
-          name: personaName.trim(),
-          role: personaRole.trim(),
-          personality: personaPersonality.trim() || 'Friendly and professional',
-          languageStyle: languageStyle as 'formal' | 'casual' | 'mixed',
-        },
-        targetLanguage: selectedLanguage,
-      };
-
-      console.log('Selected Language:', selectedLanguage); // Add this
-      console.log('Creating scenario:', newScenario);
-      addScenario(newScenario);
-      router.back();
-    } catch (error) {
-      console.error('Error creating scenario:', error);
-      Alert.alert('Error', 'Failed to create scenario. Please try again.');
-    }
-  }, [
-    title,
-    description,
-    personaName,
-    personaRole,
-    personaPersonality,
-    category,
-    difficulty,
-    languageStyle,
-    selectedLanguage,
-    addScenario,
-  ]);
+        if (!user?.id) {
+          Alert.alert('Error', 'Must be logged in to create scenarios');
+          return;
+        }
+  
+        const newScenario: Scenario = {
+          id: generateId(),
+          title: title.trim(),
+          description: description.trim(),
+          category: category as 'shopping' | 'dining' | 'travel' | 'business' | 'casual',
+          difficulty: difficulty as 'beginner' | 'intermediate' | 'advanced',
+          persona: {
+            name: personaName.trim(),
+            role: personaRole.trim(),
+            personality: personaPersonality.trim() || 'Friendly and professional',
+            languageStyle: languageStyle as 'formal' | 'casual' | 'mixed',
+          },
+          targetLanguage: selectedLanguage,
+        };
+  
+        // First save to Supabase
+        await ScenarioService.createScenario(newScenario, user.id);
+        
+        // Then add to local state
+        addScenario(newScenario);
+        router.back();
+      } catch (error) {
+        console.error('Error creating scenario:', error);
+        Alert.alert('Error', 'Failed to create scenario. Please try again.');
+      }
+    }, [
+      title,
+      description,
+      personaName,
+      personaRole,
+      personaPersonality,
+      category,
+      difficulty,
+      languageStyle,
+      selectedLanguage,
+      addScenario,
+      user
+    ]);
 
   return (
 <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>

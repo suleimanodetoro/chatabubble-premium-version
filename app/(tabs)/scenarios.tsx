@@ -1,5 +1,5 @@
 // app/(tabs)/scenarios.tsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { StyleSheet, TextInput, Alert, Pressable } from "react-native";
 import { router } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
@@ -20,77 +20,105 @@ export default function ScenariosScreen() {
     setCurrentSession,
     saveSession,
     sourceLanguage,
+    loadScenarios,
+    user,  
   } = useAppStore();
 
-  const handleScenarioPress = async (scenario: Scenario) => {
-  console.log('Pressing scenario:', scenario);
-  
-  if (!sourceLanguage || !scenario.targetLanguage) {
-    console.log('Missing languages:', { sourceLanguage, targetLanguage: scenario.targetLanguage });
-    Alert.alert(
-      "Language Selection Required",
-      "This scenario doesn't have a target language set"
-    );
-    return;
-  }
+  // Simply call loadScenarios from useAppStore
+  useEffect(() => {
+    loadScenarios();
+  }, [loadScenarios]);
 
-  try {
-    // First, check for existing active sessions for this scenario
-    const existingSessions = Object.values(useAppStore.getState().activeSessions)
-      .filter(session => 
-        session.scenarioId === scenario.id && 
-        session.status !== 'completed'
-      );
+ 
 
-    let sessionToUse: Session;
-    let messages: ChatMessage[] = [];
 
-    if (existingSessions.length > 0) {
-      // Use the most recent session
-      sessionToUse = existingSessions.sort((a, b) => b.lastUpdated - a.lastUpdated)[0];
-      console.log('Using existing session:', sessionToUse.id);
-      
-      // Load messages for existing session
-      messages = await StorageService.loadChatHistory(sessionToUse.id);
-      console.log('Loaded existing messages:', messages.length);
-      
-      sessionToUse = {
-        ...sessionToUse,
-        messages,
-        lastUpdated: Date.now()
-      };
-    } else {
-      // Create new session only if no existing one found
-      const sessionId = generateId();
-      console.log('Creating new session:', sessionId);
-      
-      sessionToUse = {
-        id: sessionId,
-        userId: "guest",
-        scenarioId: scenario.id,
-        targetLanguage: scenario.targetLanguage,
-        sourceLanguage,
-        messages: [],
-        startTime: Date.now(),
-        lastUpdated: Date.now(),
-        scenario: scenario,
-        status: 'active'
-      };
+  const clearStorage = async () => {
+    try {
+      await StorageService.clearAll();
+      Alert.alert('Success', 'Storage cleared');
+    } catch (error) {
+      console.error('Error clearing storage:', error);
+      Alert.alert('Error', 'Failed to clear storage');
     }
+  };
 
-    setCurrentScenario(scenario);
-    setCurrentSession(sessionToUse);
-    await saveSession(sessionToUse);
-
-    router.push({
-      pathname: "/(chat)/[id]",
-      params: { id: sessionToUse.id },
-    });
-  } catch (error) {
-    console.error('Error handling scenario press:', error);
-    Alert.alert('Error', 'Failed to load scenario');
-  }
-};
+  const handleScenarioPress = async (scenario: Scenario) => {
+    console.log('Pressing scenario:', scenario);
+    
+    if (!sourceLanguage || !scenario.targetLanguage) {
+      console.log('Missing languages:', { sourceLanguage, targetLanguage: scenario.targetLanguage });
+      Alert.alert(
+        "Language Selection Required",
+        "This scenario doesn't have a target language set"
+      );
+      return;
+    }
+  
+    try {
+      // First, check for existing active sessions for this scenario
+      const existingSessions = Object.values(useAppStore.getState().activeSessions)
+        .filter(session => 
+          session.scenarioId === scenario.id && 
+          session.status !== 'completed'
+        );
+  
+      let sessionToUse: Session;
+      let messages: ChatMessage[] = [];
+  
+      if (existingSessions.length > 0) {
+        // Use the most recent session but update the userId
+        sessionToUse = existingSessions.sort((a, b) => b.lastUpdated - a.lastUpdated)[0];
+        console.log('Using existing session:', sessionToUse.id);
+        
+        // Load messages for existing session
+        messages = await StorageService.loadChatHistory(sessionToUse.id);
+        console.log('Loaded existing messages:', messages.length);
+        
+        sessionToUse = {
+          ...sessionToUse,
+          messages,
+          lastUpdated: Date.now(),
+          userId: user?.id || 'guest' // Update the userId here
+        };
+      } else {
+        // Create new session only if no existing one found
+        const sessionId = generateId();
+        console.log('Creating new session:', sessionId);
+        
+        sessionToUse = {
+          id: sessionId,
+          userId: user?.id || 'guest',
+          scenarioId: scenario.id,
+          targetLanguage: scenario.targetLanguage,
+          sourceLanguage,
+          messages: [],
+          startTime: Date.now(),
+          lastUpdated: Date.now(),
+          scenario: scenario,
+          status: 'active'
+        };
+      }
+  
+      // Add debug log
+      console.log('Session user state:', {
+        sessionUserId: sessionToUse.userId,
+        currentUser: user?.id,
+        isLoggedIn: !!user
+      });
+  
+      setCurrentScenario(scenario);
+      setCurrentSession(sessionToUse);
+      await saveSession(sessionToUse);
+  
+      router.push({
+        pathname: "/(chat)/[id]",
+        params: { id: sessionToUse.id },
+      });
+    } catch (error) {
+      console.error('Error handling scenario press:', error);
+      Alert.alert('Error', 'Failed to load scenario');
+    }
+  };
 
   const handleCreateScenario = () => {
     router.push("/create-scenario");
@@ -155,6 +183,7 @@ export default function ScenariosScreen() {
   );
 
   return (
+    
     <ThemedView useSafeArea style={styles.container}>
       <ThemedView style={styles.header}>
         <ThemedText style={styles.headerTitle}>Language Scenarios</ThemedText>
@@ -162,6 +191,25 @@ export default function ScenariosScreen() {
           Choose a scenario to start practicing or create your own
         </ThemedText>
       </ThemedView>
+      
+{/* <ThemedView style={styles.searchContainer}>
+  <TextInput
+    style={styles.searchInput}
+    placeholder="Search scenarios..."
+    value={searchQuery}
+    onChangeText={setSearchQuery}
+    placeholderTextColor="#666"
+  />
+  <Pressable onPress={handleCreateScenario} style={styles.createButton}>
+    <ThemedText style={styles.createButtonText}>Create New</ThemedText>
+  </Pressable>
+  {__DEV__ && (
+    <Pressable onPress={clearStorage} style={styles.createButton}>
+      <ThemedText style={styles.createButtonText}>Clear Storage</ThemedText>
+    </Pressable>
+  )}
+</ThemedView> */}
+
 
       <ThemedView style={styles.searchContainer}>
         <TextInput

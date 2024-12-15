@@ -8,6 +8,10 @@ import { useChatContext } from '../contexts/ChatContext';
 // components/ChatMessages.tsx
 export const ChatMessages = memo(function ChatMessages() {
     const { state } = useChatContext();
+    // Only log in development
+  if (__DEV__) {
+    console.log('ChatMessages - Messages count:', state.messages.length);
+  }
     
     // Add debug logging
     useEffect(() => {
@@ -32,6 +36,7 @@ export const ChatMessages = memo(function ChatMessages() {
           contentContainerStyle={styles.list}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
+
         />
       </View>
     );

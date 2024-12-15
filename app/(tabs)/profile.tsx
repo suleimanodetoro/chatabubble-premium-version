@@ -2,14 +2,15 @@
 import { StyleSheet, Alert, Pressable, TextInput, Modal, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { useAppStore } from '@/hooks/useAppStore';
 import { Language } from '@/types';
 import { supabase } from '@/lib/supabase/client';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
+import { MetricsService } from '@/lib/services/metrics';
+import { ProfileService } from '@/lib/services/profile';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -27,6 +28,15 @@ export default function ProfileScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
+  // Stats state
+  const [stats, setStats] = useState({
+    totalSessions: 0,
+    languageStats: {} as Record<string, {
+      sessionsCompleted: number,
+      lastPracticed: string | null
+    }>
+  });
+
   const AVAILABLE_LANGUAGES: Language[] = [
     { code: 'es', name: 'Spanish', direction: 'ltr' },
     { code: 'fr', name: 'French', direction: 'ltr' },
@@ -35,6 +45,30 @@ export default function ProfileScreen() {
     { code: 'pt', name: 'Portuguese', direction: 'ltr' },
     { code: 'ja', name: 'Japanese', direction: 'ltr' },
   ];
+
+  // Load user stats
+  useEffect(() => {
+    async function loadUserStats() {
+      if (user?.id) {
+        try {
+          const metrics = await MetricsService.getUserMetrics(user.id);
+          setStats({
+            totalSessions: metrics.totalSessions,
+            languageStats: Object.entries(metrics.languageProgress).reduce((acc, [code, data]) => ({
+              ...acc,
+              [code]: {
+                sessionsCompleted: data.sessionsCompleted,
+                lastPracticed: data.lastPracticed
+              }
+            }), {})
+          });
+        } catch (error) {
+          console.error('Error loading user stats:', error);
+        }
+      }
+    }
+    loadUserStats();
+  }, [user?.id]);
 
   const handleSignOut = async () => {
     try {
@@ -137,187 +171,212 @@ export default function ProfileScreen() {
   const renderLanguageCard = ({ item: language }: { item: Language }) => {
     const isLearning = user?.learningLanguages?.some(l => l.code === language.code) || false;
     const level = user?.currentLevel?.[language.code];
-  
-    return (
-      <ThemedView 
-        style={[
-          styles.languageCard,
-          isLearning && styles.learningCard
-        ]}
-        onTouchEnd={() => {
-          if (user) {
-            setUser({
-              ...user,
-              learningLanguages: [...(user.learningLanguages || []), language],
-              currentLevel: {
-                ...(user.currentLevel || {}),
-                [language.code]: 'beginner'
-              }
-            });
+    const languageStats = stats.languageStats[language.code];
+
+    const handleLanguageSelect = async () => {
+      if (!user) return;
+      
+      try {
+        const updatedLanguages = isLearning
+          ? user.learningLanguages.filter(l => l.code !== language.code)
+          : [...(user.learningLanguages || []), language];
+
+        await ProfileService.updateProfile(user.id, {
+          learning_languages: updatedLanguages,
+          current_levels: {
+            ...(user.currentLevel || {}),
+            [language.code]: isLearning ? undefined : 'beginner'
           }
-        }}
-      >
-        <ThemedText style={styles.languageName}>
-          {language.name}
-        </ThemedText>
-        {isLearning && level && (
-          <ThemedText style={styles.levelBadge}>
-            {level}
+        });
+
+        setUser({
+          ...user,
+          learningLanguages: updatedLanguages,
+          currentLevel: {
+            ...(user.currentLevel || {}),
+            [language.code]: isLearning ? undefined : 'beginner'
+          }
+        });
+      } catch (error) {
+        Alert.alert('Error', 'Failed to update language preferences');
+      }
+    };
+
+    return (
+      <Pressable onPress={handleLanguageSelect}>
+        <ThemedView 
+          style={[
+            styles.languageCard,
+            isLearning && styles.learningCard
+          ]}
+        >
+          <ThemedText style={styles.languageName}>
+            {language.name}
           </ThemedText>
-        )}
-      </ThemedView>
+          {isLearning && (
+            <>
+              <ThemedText style={styles.levelBadge}>
+                {level}
+              </ThemedText>
+              {languageStats && (
+                <ThemedText style={styles.statsText}>
+                  {languageStats.sessionsCompleted} sessions
+                </ThemedText>
+              )}
+            </>
+          )}
+        </ThemedView>
+      </Pressable>
     );
   };
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
-    <ThemedView style={styles.container}>
+      <ThemedView style={styles.container}>
+        <ThemedView style={styles.header}>
+          <ThemedText style={styles.email}>
+            {user?.email || 'Guest User'}
+          </ThemedText>
+        </ThemedView>
 
-      <ThemedView style={styles.header}>
-        <ThemedText style={styles.email}>
-          {user?.email || 'Guest User'}
-        </ThemedText>
-      </ThemedView>
+        <ThemedView style={styles.section}>
+          <ThemedText style={styles.sectionTitle}>Account Settings</ThemedText>
+          <Pressable 
+            style={styles.button} 
+            onPress={() => setIsEmailModalVisible(true)}
+          >
+            <ThemedText style={styles.buttonText}>Update Email</ThemedText>
+          </Pressable>
+          <Pressable 
+            style={styles.button} 
+            onPress={() => setIsPasswordModalVisible(true)}
+          >
+            <ThemedText style={styles.buttonText}>Update Password</ThemedText>
+          </Pressable>
+        </ThemedView>
 
-      <ThemedView style={styles.section}>
-        <ThemedText style={styles.sectionTitle}>Account Settings</ThemedText>
-        <Pressable 
-          style={styles.button} 
-          onPress={() => setIsEmailModalVisible(true)}
-        >
-          <ThemedText style={styles.buttonText}>Update Email</ThemedText>
-        </Pressable>
-        <Pressable 
-          style={styles.button} 
-          onPress={() => setIsPasswordModalVisible(true)}
-        >
-          <ThemedText style={styles.buttonText}>Update Password</ThemedText>
-        </Pressable>
-      </ThemedView>
-
-      <ThemedView style={styles.section}>
-        <ThemedText style={styles.sectionTitle}>Your Progress</ThemedText>
-        <ThemedView style={styles.statsGrid}>
-          <ThemedView style={styles.statBox}>
-            <ThemedText style={styles.statNumber}>
-            {user?.learningLanguages?.length || 0}
-            </ThemedText>
-            <ThemedText style={styles.statLabel}>Languages</ThemedText>
-          </ThemedView>
-          <ThemedView style={styles.statBox}>
-            <ThemedText style={styles.statNumber}>0</ThemedText>
-            <ThemedText style={styles.statLabel}>Total Sessions</ThemedText>
+        <ThemedView style={styles.section}>
+          <ThemedText style={styles.sectionTitle}>Your Progress</ThemedText>
+          <ThemedView style={styles.statsGrid}>
+            <ThemedView style={styles.statBox}>
+              <ThemedText style={styles.statNumber}>
+                {user?.learningLanguages?.length || 0}
+              </ThemedText>
+              <ThemedText style={styles.statLabel}>Languages</ThemedText>
+            </ThemedView>
+            <ThemedView style={styles.statBox}>
+              <ThemedText style={styles.statNumber}>{stats.totalSessions}</ThemedText>
+              <ThemedText style={styles.statLabel}>Total Sessions</ThemedText>
+            </ThemedView>
           </ThemedView>
         </ThemedView>
-      </ThemedView>
 
-      <ThemedView style={styles.languagesSection}>
-        <ThemedText style={styles.sectionTitle}>Learning Languages</ThemedText>
-        <FlashList
-          data={AVAILABLE_LANGUAGES}
-          renderItem={renderLanguageCard}
-          estimatedItemSize={80}
-          numColumns={2}
-          contentContainerStyle={styles.languagesGrid}
-        />
-      </ThemedView>
+        <ThemedView style={styles.languagesSection}>
+          <ThemedText style={styles.sectionTitle}>Learning Languages</ThemedText>
+          <FlashList
+            data={AVAILABLE_LANGUAGES}
+            renderItem={renderLanguageCard}
+            estimatedItemSize={80}
+            numColumns={2}
+            contentContainerStyle={styles.languagesGrid}
+          />
+        </ThemedView>
 
-      <ThemedView style={styles.footer}>
-        <Pressable 
-          style={styles.signOutButton} 
-          onPress={handleSignOut}
+        <ThemedView style={styles.footer}>
+          <Pressable 
+            style={styles.signOutButton} 
+            onPress={handleSignOut}
+          >
+            <ThemedText style={styles.signOutText}>Sign Out</ThemedText>
+          </Pressable>
+
+          <Pressable 
+            style={styles.deleteButton} 
+            onPress={handleDeleteAccount}
+          >
+            <ThemedText style={styles.deleteText}>Delete Account</ThemedText>
+          </Pressable>
+        </ThemedView>
+
+        {/* Email Update Modal */}
+        <Modal
+          visible={isEmailModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setIsEmailModalVisible(false)}
         >
-          <ThemedText style={styles.signOutText}>Sign Out</ThemedText>
-        </Pressable>
+          <View style={styles.modalContainer}>
+            <ThemedView style={styles.modalContent}>
+              <ThemedText style={styles.modalTitle}>Update Email</ThemedText>
+              <TextInput
+                style={styles.input}
+                placeholder="New Email"
+                value={newEmail}
+                onChangeText={setNewEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+              <View style={styles.modalButtons}>
+                <Pressable 
+                  style={styles.modalButton} 
+                  onPress={() => setIsEmailModalVisible(false)}
+                >
+                  <ThemedText style={styles.modalButtonText}>Cancel</ThemedText>
+                </Pressable>
+                <Pressable 
+                  style={[styles.modalButton, styles.modalButtonPrimary]} 
+                  onPress={handleUpdateEmail}
+                >
+                  <ThemedText style={styles.modalButtonTextPrimary}>Update</ThemedText>
+                </Pressable>
+              </View>
+            </ThemedView>
+          </View>
+        </Modal>
 
-        <Pressable 
-          style={styles.deleteButton} 
-          onPress={handleDeleteAccount}
+        {/* Password Update Modal */}
+        <Modal
+          visible={isPasswordModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setIsPasswordModalVisible(false)}
         >
-          <ThemedText style={styles.deleteText}>Delete Account</ThemedText>
-        </Pressable>
+          <View style={styles.modalContainer}>
+            <ThemedView style={styles.modalContent}>
+              <ThemedText style={styles.modalTitle}>Update Password</ThemedText>
+              <TextInput
+                style={styles.input}
+                placeholder="New Password"
+                value={newPassword}
+                onChangeText={setNewPassword}
+                secureTextEntry
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Confirm New Password"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+              />
+              <View style={styles.modalButtons}>
+                <Pressable 
+                  style={styles.modalButton} 
+                  onPress={() => setIsPasswordModalVisible(false)}
+                >
+                  <ThemedText style={styles.modalButtonText}>Cancel</ThemedText>
+                </Pressable>
+                <Pressable 
+                  style={[styles.modalButton, styles.modalButtonPrimary]} 
+                  onPress={handleUpdatePassword}
+                >
+                  <ThemedText style={styles.modalButtonTextPrimary}>Update</ThemedText>
+                </Pressable>
+              </View>
+            </ThemedView>
+          </View>
+        </Modal>
       </ThemedView>
-
-      {/* Email Update Modal */}
-      <Modal
-        visible={isEmailModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsEmailModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <ThemedView style={styles.modalContent}>
-            <ThemedText style={styles.modalTitle}>Update Email</ThemedText>
-            <TextInput
-              style={styles.input}
-              placeholder="New Email"
-              value={newEmail}
-              onChangeText={setNewEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-            <View style={styles.modalButtons}>
-              <Pressable 
-                style={styles.modalButton} 
-                onPress={() => setIsEmailModalVisible(false)}
-              >
-                <ThemedText style={styles.modalButtonText}>Cancel</ThemedText>
-              </Pressable>
-              <Pressable 
-                style={[styles.modalButton, styles.modalButtonPrimary]} 
-                onPress={handleUpdateEmail}
-              >
-                <ThemedText style={styles.modalButtonTextPrimary}>Update</ThemedText>
-              </Pressable>
-            </View>
-          </ThemedView>
-        </View>
-      </Modal>
-
-      {/* Password Update Modal */}
-      <Modal
-        visible={isPasswordModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsPasswordModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <ThemedView style={styles.modalContent}>
-            <ThemedText style={styles.modalTitle}>Update Password</ThemedText>
-            <TextInput
-              style={styles.input}
-              placeholder="New Password"
-              value={newPassword}
-              onChangeText={setNewPassword}
-              secureTextEntry
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Confirm New Password"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-            />
-            <View style={styles.modalButtons}>
-              <Pressable 
-                style={styles.modalButton} 
-                onPress={() => setIsPasswordModalVisible(false)}
-              >
-                <ThemedText style={styles.modalButtonText}>Cancel</ThemedText>
-              </Pressable>
-              <Pressable 
-                style={[styles.modalButton, styles.modalButtonPrimary]} 
-                onPress={handleUpdatePassword}
-              >
-                <ThemedText style={styles.modalButtonTextPrimary}>Update</ThemedText>
-              </Pressable>
-            </View>
-          </ThemedView>
-        </View>
-      </Modal>
-    </ThemedView>
     </SafeAreaView>
-
   );
 }
 
@@ -357,6 +416,11 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+  },
+  statsText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
   },
   statBox: {
     alignItems: 'center',

@@ -1,37 +1,51 @@
 // components/ui/ChatInput.tsx
-import { useState, useCallback, memo } from 'react';
-import { StyleSheet, TextInput, Pressable, View, Platform, Keyboard, Alert } from 'react-native';
-import { ThemedText } from '../ThemedText';
-import { useChatContext } from '../../contexts/ChatContext';
-import { useAppStore } from '../../hooks/useAppStore';
-import { OpenAIService } from '../../lib/services/openai';
-import { Language } from '../../types';
-import { StorageService } from '../../lib/services/storage';
-import { generateId } from '@/lib/utils/ids';
+import { useState, useCallback, memo } from "react";
+import {
+  StyleSheet,
+  TextInput,
+  Pressable,
+  View,
+  Platform,
+  Keyboard,
+  Alert,
+} from "react-native";
+import { ThemedText } from "../ThemedText";
+import { useChatContext } from "../../contexts/ChatContext";
+import { useAppStore } from "../../hooks/useAppStore";
+import { OpenAIService } from "../../lib/services/openai";
+import { Language } from "../../types";
+import { StorageService } from "../../lib/services/storage";
+import { generateId } from "@/lib/utils/ids";
 
 interface ChatInputProps {
   sessionLanguage: Language | null;
   disabled?: boolean;
 }
 
-export const ChatInput = memo(function ChatInput({ 
-  sessionLanguage, 
-  disabled = false 
+export const ChatInput = memo(function ChatInput({
+  sessionLanguage,
+  disabled = false,
 }: ChatInputProps) {
-  const [inputText, setInputText] = useState('');
+  const [inputText, setInputText] = useState("");
   const { state, dispatch } = useChatContext();
   const { currentScenario, currentSession, setCurrentSession } = useAppStore();
 
   const handleSend = useCallback(async () => {
-    if (!inputText.trim() || state.isLoading || !currentScenario || !sessionLanguage || disabled) {
+    if (
+      !inputText.trim() ||
+      state.isLoading ||
+      !currentScenario ||
+      !sessionLanguage ||
+      disabled
+    ) {
       return;
     }
 
     const trimmedText = inputText.trim();
-    setInputText('');
+    setInputText("");
     Keyboard.dismiss();
 
-    dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: "SET_LOADING", payload: true });
 
     try {
       // Create initial user message
@@ -39,18 +53,18 @@ export const ChatInput = memo(function ChatInput({
         id: generateId(),
         content: {
           original: trimmedText,
-          translated: 'Translating...',
+          translated: "Translating...",
         },
-        sender: 'user',
+        sender: "user",
         timestamp: Date.now(),
         isEdited: false,
       };
 
-      dispatch({ type: 'ADD_MESSAGE', payload: userMessage });
+      dispatch({ type: "ADD_MESSAGE", payload: userMessage });
 
       // First translate user message
       const translatedUserText = await OpenAIService.translateText(
-        trimmedText, 
+        trimmedText,
         sessionLanguage.name
       );
 
@@ -59,16 +73,16 @@ export const ChatInput = memo(function ChatInput({
         ...userMessage,
         content: {
           original: trimmedText,
-          translated: translatedUserText
-        }
+          translated: translatedUserText,
+        },
       };
 
       dispatch({
-        type: 'UPDATE_MESSAGE',
+        type: "UPDATE_MESSAGE",
         payload: {
           id: userMessage.id,
-          message: updatedUserMessage
-        }
+          message: updatedUserMessage,
+        },
       });
 
       // Get AI response with updated messages
@@ -80,8 +94,8 @@ export const ChatInput = memo(function ChatInput({
 
       // Translate AI response to English
       const translatedAiResponse = await OpenAIService.translateText(
-        aiResponse, 
-        'English'
+        aiResponse,
+        "English"
       );
 
       // Create and add AI message
@@ -89,14 +103,14 @@ export const ChatInput = memo(function ChatInput({
         id: generateId(),
         content: {
           original: aiResponse,
-          translated: translatedAiResponse
+          translated: translatedAiResponse,
         },
-        sender: 'assistant',
+        sender: "assistant",
         timestamp: Date.now(),
         isEdited: false,
       };
 
-      dispatch({ type: 'ADD_MESSAGE', payload: aiMessage });
+      dispatch({ type: "ADD_MESSAGE", payload: aiMessage });
 
       // Update session
       if (currentSession) {
@@ -105,26 +119,30 @@ export const ChatInput = memo(function ChatInput({
           messages: [...state.messages, updatedUserMessage, aiMessage],
           lastUpdated: Date.now(),
         };
+        // Log before saving
+        console.log("Messages after adding:", {
+          stateMessages: state.messages,
+          sessionMessages: updatedSession.messages,
+        });
 
         await StorageService.saveSession(updatedSession);
         setCurrentSession(updatedSession);
       }
-
     } catch (error) {
-      console.error('Message error:', error);
-      Alert.alert('Error', 'Failed to send message. Please try again.');
+      console.error("Message error:", error);
+      Alert.alert("Error", "Failed to send message. Please try again.");
     } finally {
-      dispatch({ type: 'SET_LOADING', payload: false });
+      dispatch({ type: "SET_LOADING", payload: false });
     }
   }, [
-    inputText, 
-    state.messages, 
-    currentScenario, 
-    sessionLanguage, 
-    currentSession, 
-    dispatch, 
+    inputText,
+    state.messages,
+    currentScenario,
+    sessionLanguage,
+    currentSession,
+    dispatch,
     setCurrentSession,
-    disabled
+    disabled,
   ]);
 
   return (
@@ -146,33 +164,33 @@ export const ChatInput = memo(function ChatInput({
         disabled={!inputText.trim() || state.isLoading || disabled}
         style={({ pressed }) => [
           styles.sendButton,
-          (!inputText.trim() || state.isLoading || disabled) && styles.sendButtonDisabled,
-          pressed && styles.sendButtonPressed
+          (!inputText.trim() || state.isLoading || disabled) &&
+            styles.sendButtonDisabled,
+          pressed && styles.sendButtonPressed,
         ]}
       >
         <ThemedText style={styles.sendButtonText}>
-          {state.isLoading ? '...' : 'Send'}
+          {state.isLoading ? "..." : "Send"}
         </ThemedText>
       </Pressable>
     </View>
   );
 });
 
-
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: "row",
+    alignItems: "flex-end",
     paddingHorizontal: 8,
     paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 8 : 8,
-    backgroundColor: '#fff',
+    paddingBottom: Platform.OS === "ios" ? 8 : 8,
+    backgroundColor: "#fff",
   },
   input: {
     flex: 1,
     maxHeight: 100,
     minHeight: 40,
-    backgroundColor: '#f2f2f7',
+    backgroundColor: "#f2f2f7",
     borderRadius: 20,
     paddingHorizontal: 15,
     paddingTop: 10,
@@ -181,16 +199,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   inputDisabled: {
-    backgroundColor: '#F8F9FA',
-    color: '#999',
+    backgroundColor: "#F8F9FA",
+    color: "#999",
   },
   sendButton: {
     height: 36,
     paddingHorizontal: 16,
-    backgroundColor: '#007AFF',
+    backgroundColor: "#007AFF",
     borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   sendButtonDisabled: {
     opacity: 0.5,
@@ -199,8 +217,8 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   sendButtonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });

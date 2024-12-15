@@ -15,6 +15,10 @@ import { Feather } from "@expo/vector-icons";
 import { StorageService } from "@/lib/services/storage";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ChatMessages } from "@/components/ChatMessages";
+import { ChatService } from "@/lib/services/chat";
+import { supabase } from "@/lib/supabase/client";
+
+
 
 const DEFAULT_LANGUAGE = {
   code: "en",
@@ -32,62 +36,136 @@ export default function ChatScreen() {
     loadSession,
     setCurrentSession,
     setCurrentScenario,
+    user
   } = useAppStore();
   const insets = useSafeAreaInsets();
+  const checkSessionStorage = async () => {
+    if (!currentSession?.id) return;
+    
+    // Check local storage
+    const localMessages = await StorageService.loadChatHistory(currentSession.id);
+    console.log('Local storage messages:', {
+      count: localMessages.length,
+      messages: localMessages
+    });
+    
+    // Check Supabase if user is logged in
+    if (user?.id) {
+      const { data } = await supabase
+        .from('chat_sessions')
+        .select('*')
+        .eq('id', currentSession.id)
+        .single();
+        
+      console.log('Supabase storage:', {
+        exists: !!data,
+        messageCount: data?.messages?.length,
+        messages: data?.messages
+      });
+    }
+  };
+
+  const checkSyncStatus = async () => {
+    if (!currentSession?.id) return;
+    
+    const { data, error } = await supabase
+      .from('chat_sessions')
+      .select('*')
+      .eq('id', currentSession.id)
+      .single();
+  
+    console.log('Supabase session status:', {
+      exists: !!data,
+      messageCount: data?.messages?.length,
+      status: data?.status,
+      error: error?.message
+    });
+  };
 
   useEffect(() => {
     async function loadChatState() {
-      if (id) {
+      if (id && currentSession) {
         try {
           console.log('Loading chat state for ID:', id);
           dispatch({ type: 'SET_SESSION', payload: id as string });
-
-          // Load the session first
-          const savedSession = await loadSession(id as string);
-
+          
+          // First load messages from local storage
+          const messages = await StorageService.loadChatHistory(id as string);
+          if (messages.length > 0) {
+            dispatch({ type: 'LOAD_MESSAGES', payload: messages });
+          }
+          
+          // Then try to sync with Supabase
+          const savedSession = await ChatService.createOrUpdateSession(
+            {
+              ...currentSession,
+              messages
+            },
+            messages
+          );
+  
           if (savedSession) {
-            console.log('Loaded session:', savedSession);
-            setCurrentSession(savedSession);
-            setCurrentScenario(savedSession.scenario);
-
-            // Important: Load the messages from the session itself
-            if (savedSession.messages && savedSession.messages.length > 0) {
-              console.log('Loading messages from session:', savedSession.messages.length);
-              dispatch({ type: 'LOAD_MESSAGES', payload: savedSession.messages });
-              return; // Exit early as we have messages
-            }
+            setCurrentSession({
+              ...currentSession,
+              ...savedSession,
+              messages
+            });
           }
-
-          // Fallback: Try loading messages directly from storage
-          const history = await StorageService.loadChatHistory(id as string);
-          if (history.length > 0) {
-            console.log('Loaded history from storage:', history.length);
-            dispatch({ type: 'LOAD_MESSAGES', payload: history });
-          }
-
         } catch (error) {
           console.error('Error loading chat state:', error);
         }
       }
     }
     loadChatState();
+  }, [id]); 
+  // In [id].tsx, add this useEffect
+useEffect(() => {
+    async function debugMessages() {
+      if (id) {
+        console.log('=== DEBUG MESSAGES START ===');
+        // Check AsyncStorage directly
+        const chatKey = `@chat_history:${id}`;
+        const data = await AsyncStorage.getItem(chatKey);
+        console.log('Raw chat history:', data);
+        
+        // Check via StorageService
+        const messages = await StorageService.loadChatHistory(id as string);
+        console.log('StorageService messages:', messages);
+  
+        // Check Supabase
+        const { data: sessionData } = await supabase
+          .from('chat_sessions')
+          .select('*')
+          .eq('id', id)
+          .single();
+        console.log('Supabase session:', sessionData);
+        console.log('=== DEBUG MESSAGES END ===');
+      }
+    }
+    debugMessages();
   }, [id]);
 
   const handleComplete = async () => {
     try {
-      await completeSession();
+      if (!currentSession || !state.messages.length) return;
+      await completeSession(); // Use the one from ChatContext
       router.back();
     } catch (error) {
       console.error("Error completing session:", error);
+      Alert.alert('Error', 'Failed to complete session');
     }
   };
 
   const handleSave = async () => {
     try {
-      await saveSession();
+      if (!currentSession || !state.messages.length) return;
+      
+      await ChatService.createOrUpdateSession(currentSession, state.messages);
+      dispatch({ type: 'SET_STATUS', payload: 'saved' });
       router.back();
     } catch (error) {
       console.error("Error saving session:", error);
+      Alert.alert('Error', 'Failed to save session');
     }
   };
 
@@ -151,6 +229,14 @@ export default function ChatScreen() {
           )}
         </View>
         <View style={styles.headerRight}>
+        {__DEV__ && (
+  <Pressable 
+    style={styles.headerButton} 
+    onPress={checkSessionStorage}
+  >
+    <Feather name="info" size={20} color="#FF3B30" />
+  </Pressable>
+)}
           {__DEV__ && (
             <Pressable 
               style={styles.headerButton} 
@@ -162,9 +248,13 @@ export default function ChatScreen() {
           <Pressable style={styles.headerButton} onPress={handleSave}>
             <Feather name="bookmark" size={20} color="#007AFF" />
           </Pressable>
-          <Pressable style={styles.headerButton} onPress={handleComplete}>
-            <Feather name="check-circle" size={20} color="#007AFF" />
-          </Pressable>
+          
+          <Pressable style={styles.headerButton} onPress={async () => {
+  await handleComplete();
+  await checkSyncStatus();
+}}>
+  <Feather name="check-circle" size={20} color="#007AFF" />
+</Pressable>
         </View>
       </View>
 
