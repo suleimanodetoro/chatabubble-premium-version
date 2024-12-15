@@ -1,5 +1,5 @@
 // app/(tabs)/profile.tsx
-import { StyleSheet, Alert, Pressable, TextInput, Modal, View } from 'react-native';
+import { StyleSheet, Alert, Pressable, ScrollView, TextInput, Modal, View, Text } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase/client';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MetricsService } from '@/lib/services/metrics';
 import { ProfileService } from '@/lib/services/profile';
+import { ChevronDown, ChevronUp } from 'lucide-react-native';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -21,14 +22,15 @@ export default function ProfileScreen() {
     setCurrentScenario,
   } = useAppStore();
 
-  // Modal states
+  // State management
+  const [isLoading, setIsLoading] = useState(true);
   const [isEmailModalVisible, setIsEmailModalVisible] = useState(false);
   const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
+  const [isLanguagesExpanded, setIsLanguagesExpanded] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  // Stats state
   const [stats, setStats] = useState({
     totalSessions: 0,
     languageStats: {} as Record<string, {
@@ -46,11 +48,12 @@ export default function ProfileScreen() {
     { code: 'ja', name: 'Japanese', direction: 'ltr' },
   ];
 
-  // Load user stats
+  // Load user metrics
   useEffect(() => {
     async function loadUserStats() {
       if (user?.id) {
         try {
+          setIsLoading(true);
           const metrics = await MetricsService.getUserMetrics(user.id);
           setStats({
             totalSessions: metrics.totalSessions,
@@ -64,18 +67,21 @@ export default function ProfileScreen() {
           });
         } catch (error) {
           console.error('Error loading user stats:', error);
+          Alert.alert('Error', 'Failed to load user statistics');
+        } finally {
+          setIsLoading(false);
         }
       }
     }
     loadUserStats();
   }, [user?.id]);
 
+  // Event handlers
   const handleSignOut = async () => {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       
-      // Clear all relevant state
       setUser(null);
       setCurrentSession(null);
       setCurrentScenario(null);
@@ -203,10 +209,10 @@ export default function ProfileScreen() {
     };
 
     return (
-      <Pressable onPress={handleLanguageSelect}>
+      <Pressable onPress={handleLanguageSelect} style={styles.languageCard}>
         <ThemedView 
           style={[
-            styles.languageCard,
+            styles.languageCardInner,
             isLearning && styles.learningCard
           ]}
         >
@@ -231,74 +237,89 @@ export default function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+    <SafeAreaView style={{ flex: 1 }} edges={['top']}>
       <ThemedView style={styles.container}>
-        <ThemedView style={styles.header}>
-          <ThemedText style={styles.email}>
-            {user?.email || 'Guest User'}
-          </ThemedText>
-        </ThemedView>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+          <ThemedView style={styles.header}>
+            <ThemedText style={styles.email}>
+              {user?.email || 'Guest User'}
+            </ThemedText>
+          </ThemedView>
 
-        <ThemedView style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Account Settings</ThemedText>
-          <Pressable 
-            style={styles.button} 
-            onPress={() => setIsEmailModalVisible(true)}
-          >
-            <ThemedText style={styles.buttonText}>Update Email</ThemedText>
-          </Pressable>
-          <Pressable 
-            style={styles.button} 
-            onPress={() => setIsPasswordModalVisible(true)}
-          >
-            <ThemedText style={styles.buttonText}>Update Password</ThemedText>
-          </Pressable>
-        </ThemedView>
-
-        <ThemedView style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Your Progress</ThemedText>
-          <ThemedView style={styles.statsGrid}>
-            <ThemedView style={styles.statBox}>
-              <ThemedText style={styles.statNumber}>
-                {user?.learningLanguages?.length || 0}
-              </ThemedText>
-              <ThemedText style={styles.statLabel}>Languages</ThemedText>
-            </ThemedView>
-            <ThemedView style={styles.statBox}>
-              <ThemedText style={styles.statNumber}>{stats.totalSessions}</ThemedText>
-              <ThemedText style={styles.statLabel}>Total Sessions</ThemedText>
+          <ThemedView style={styles.section}>
+            <ThemedText style={styles.sectionTitle}>Your Progress</ThemedText>
+            <ThemedView style={styles.statsGrid}>
+              <ThemedView style={styles.statBox}>
+                <ThemedText style={styles.statNumber}>
+                  {isLoading ? '...' : user?.learningLanguages?.length || 0}
+                </ThemedText>
+                <ThemedText style={styles.statLabel}>Languages</ThemedText>
+              </ThemedView>
+              <ThemedView style={styles.statBox}>
+                <ThemedText style={styles.statNumber}>
+                  {isLoading ? '...' : stats.totalSessions}
+                </ThemedText>
+                <ThemedText style={styles.statLabel}>Total Sessions</ThemedText>
+              </ThemedView>
             </ThemedView>
           </ThemedView>
-        </ThemedView>
 
-        <ThemedView style={styles.languagesSection}>
-          <ThemedText style={styles.sectionTitle}>Learning Languages</ThemedText>
-          <FlashList
-            data={AVAILABLE_LANGUAGES}
-            renderItem={renderLanguageCard}
-            estimatedItemSize={80}
-            numColumns={2}
-            contentContainerStyle={styles.languagesGrid}
-          />
-        </ThemedView>
+          <ThemedView style={styles.section}>
+            <Pressable 
+              style={styles.sectionHeader} 
+              onPress={() => setIsLanguagesExpanded(!isLanguagesExpanded)}
+            >
+              <ThemedText style={styles.sectionTitle}>Learning Languages</ThemedText>
+  <ThemedText style={styles.expandIcon}>
+    {isLanguagesExpanded ? '▼' : '▲'}
+  </ThemedText>
+            </Pressable>
+            
+            {isLanguagesExpanded && (
+              <View style={styles.languagesGrid}>
+                {AVAILABLE_LANGUAGES.map((language) => (
+                  <View key={language.code} style={styles.languageWrapper}>
+                    {renderLanguageCard({ item: language })}
+                  </View>
+                ))}
+              </View>
+            )}
+          </ThemedView>
 
-        <ThemedView style={styles.footer}>
-          <Pressable 
-            style={styles.signOutButton} 
-            onPress={handleSignOut}
-          >
-            <ThemedText style={styles.signOutText}>Sign Out</ThemedText>
-          </Pressable>
+          <ThemedView style={styles.section}>
+            <ThemedText style={styles.sectionTitle}>Account Settings</ThemedText>
+            <Pressable 
+              style={styles.button} 
+              onPress={() => setIsEmailModalVisible(true)}
+            >
+              <ThemedText style={styles.buttonText}>Update Email</ThemedText>
+            </Pressable>
+            <Pressable 
+              style={styles.button} 
+              onPress={() => setIsPasswordModalVisible(true)}
+            >
+              <ThemedText style={styles.buttonText}>Update Password</ThemedText>
+            </Pressable>
+          </ThemedView>
 
-          <Pressable 
-            style={styles.deleteButton} 
-            onPress={handleDeleteAccount}
-          >
-            <ThemedText style={styles.deleteText}>Delete Account</ThemedText>
-          </Pressable>
-        </ThemedView>
+          <ThemedView style={[styles.section, styles.dangerSection]}>
+            <Pressable 
+              style={styles.signOutButton} 
+              onPress={handleSignOut}
+            >
+              <ThemedText style={styles.signOutText}>Sign Out</ThemedText>
+            </Pressable>
 
-        {/* Email Update Modal */}
+            <Pressable 
+              style={styles.deleteButton} 
+              onPress={handleDeleteAccount}
+            >
+              <ThemedText style={styles.deleteText}>Delete Account</ThemedText>
+            </Pressable>
+          </ThemedView>
+        </ScrollView>
+
+        {/* Modals */}
         <Modal
           visible={isEmailModalVisible}
           animationType="slide"
@@ -334,7 +355,6 @@ export default function ProfileScreen() {
           </View>
         </Modal>
 
-        {/* Password Update Modal */}
         <Modal
           visible={isPasswordModalVisible}
           animationType="slide"
@@ -381,170 +401,184 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    padding: 20,
-    alignItems: 'center',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#ccc',
-  },
-  email: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  section: {
-    padding: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#ccc',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 15,
-  },
-  button: {
-    backgroundColor: '#f8f9fa',
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 10,
-  },
-  buttonText: {
-    fontSize: 16,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  statsText: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-  },
-  statBox: {
-    alignItems: 'center',
-    padding: 15,
-    borderRadius: 12,
-    flex: 1,
-    margin: 5,
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  statLabel: {
-    fontSize: 12,
-    opacity: 0.7,
-    marginTop: 4,
-  },
-  languagesSection: {
-    flex: 1,
-    padding: 20,
-  },
-  languagesGrid: {
-    padding: 5,
-  },
-  languageCard: {
-    flex: 1,
-    margin: 5,
-    padding: 15,
-    borderRadius: 12,
-    backgroundColor: '#f8f9fa',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 100,
-  },
-  learningCard: {
-    borderWidth: 2,
-    borderColor: '#007AFF',
-  },
-  languageName: {
-    fontSize: 16,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  levelBadge: {
-    fontSize: 12,
-    color: '#007AFF',
-    marginTop: 8,
-    fontWeight: '500',
-  },
-  footer: {
-    padding: 20,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#ccc',
-  },
-  signOutButton: {
-    backgroundColor: '#007AFF',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  signOutText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  deleteButton: {
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  deleteText: {
-    color: '#ff3b30',
-    fontSize: 16,
-  },
-  // Modal styles
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  modalContent: {
-    width: '80%',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  input: {
-    height: 48,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    marginBottom: 16,
-    paddingHorizontal: 16,
-    backgroundColor: '#fff',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
-  },
-  modalButton: {
-    flex: 1,
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginHorizontal: 5,
-  },
-  modalButtonPrimary: {
-    backgroundColor: '#007AFF',
-  },
-  modalButtonText: {
-    color: '#007AFF',
-    fontSize: 16,
-  },
-  modalButtonTextPrimary: {
-    color: '#fff',
-    fontSize: 16,
-  },
-});
+    container: {
+      flex: 1,
+      backgroundColor: '#fff',
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      flexGrow: 1,
+    },
+    header: {
+      padding: 20,
+      alignItems: 'center',
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: '#ccc',
+    },
+    email: {
+      fontSize: 18,
+      fontWeight: '600',
+    },
+    section: {
+      padding: 20,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: '#ccc',
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      marginBottom: 15,
+    },
+    dangerSection: {
+      borderBottomWidth: 0,
+      marginTop: 20,
+    },
+    statsGrid: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+    },
+    statsText: {
+      fontSize: 12,
+      color: '#666',
+      marginTop: 4,
+    },
+    statBox: {
+      alignItems: 'center',
+      padding: 15,
+      borderRadius: 12,
+      flex: 1,
+      margin: 5,
+      backgroundColor: '#f8f9fa',
+    },
+    statNumber: {
+      fontSize: 24,
+      fontWeight: 'bold',
+    },
+    statLabel: {
+      fontSize: 12,
+      opacity: 0.7,
+      marginTop: 4,
+    },
+    languagesGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      marginHorizontal: -5,
+    },
+    languageWrapper: {
+      width: '50%',
+      padding: 5,
+    },
+    languageCard: {
+      flex: 1,
+    },
+    languageCardInner: {
+      padding: 15,
+      borderRadius: 12,
+      backgroundColor: '#f8f9fa',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 100,
+    },
+    learningCard: {
+      borderWidth: 2,
+      borderColor: '#007AFF',
+    },
+    languageName: {
+      fontSize: 16,
+      fontWeight: '500',
+      textAlign: 'center',
+    },
+    levelBadge: {
+      fontSize: 12,
+      color: '#007AFF',
+      marginTop: 8,
+      fontWeight: '500',
+    },
+    button: {
+      backgroundColor: '#f8f9fa',
+      padding: 15,
+      borderRadius: 8,
+      marginBottom: 10,
+    },
+    buttonText: {
+      fontSize: 16,
+    },
+    signOutButton: {
+      backgroundColor: '#007AFF',
+      padding: 15,
+      borderRadius: 8,
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    signOutText: {
+      color: '#fff',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    deleteButton: {
+      padding: 15,
+      borderRadius: 8,
+      alignItems: 'center',
+    },
+    deleteText: {
+      color: '#ff3b30',
+      fontSize: 16,
+    },
+    modalContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    modalContent: {
+      width: '80%',
+      backgroundColor: '#fff',
+      borderRadius: 12,
+      padding: 20,
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      marginBottom: 20,
+      textAlign: 'center',
+    },
+    input: {
+      height: 48,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: '#ccc',
+      marginBottom: 16,
+      paddingHorizontal: 16,
+      backgroundColor: '#fff',
+    },
+    modalButtons: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: 10,
+    },
+    modalButton: {
+      flex: 1,
+      padding: 15,
+      borderRadius: 8,
+      alignItems: 'center',
+      marginHorizontal: 5,
+    },
+    modalButtonPrimary: {
+      backgroundColor: '#007AFF',
+    },
+    modalButtonText: {
+      color: '#007AFF',
+      fontSize: 16,
+    },
+    modalButtonTextPrimary: {
+      color: '#fff',
+      fontSize: 16,
+    },
+  });

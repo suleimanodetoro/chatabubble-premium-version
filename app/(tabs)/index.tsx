@@ -7,6 +7,8 @@ import { ThemedText } from "../../components/ThemedText";
 import { HelloWave } from "../../components/HelloWave";
 import { useAppStore } from "../../hooks/useAppStore";
 import { Session } from "../../types";
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 
 export default function HomeScreen() {
   const user = useAppStore((state) => state.user);
@@ -85,22 +87,23 @@ export default function HomeScreen() {
   );
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.contentContainer}
-      showsVerticalScrollIndicator={false}
-    >
-      {renderWelcomeSection()}
-      {renderQuickStats()}
-      {renderRecentSection()}
-    </ScrollView>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView 
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {renderWelcomeSection()}
+        {renderQuickStats()}
+        {renderRecentSection()}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "transparent", // This ensures it uses the theme background
+    backgroundColor: '#fff', // Explicit background color
   },
   contentContainer: {
     flexGrow: 1,
