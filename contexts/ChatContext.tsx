@@ -8,6 +8,8 @@ import { useAppStore } from '@/hooks/useAppStore';
 import { supabase } from '@/lib/supabase/client';
 import NetInfo from '@react-native-community/netinfo';
 import { ProfileService } from '@/lib/services/profile';
+import { SessionManager } from '@/lib/services/sessionManager';
+
 
 
 type ChatState = {
@@ -39,39 +41,23 @@ const initialState: ChatState = {
 };
 
 const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
-  switch (action.type) {
-    case 'ADD_MESSAGE':
-  console.log('Adding message to state:', action.payload);
-  const newMessages = [...state.messages, action.payload];
-  console.log('New messages length:', newMessages.length);
+    switch (action.type) {
+      case 'ADD_MESSAGE':
+        const newMessages = [...state.messages, action.payload];
+        return {
+          ...state,
+          messages: newMessages,
+        };
   
-  // Save messages immediately when adding new ones
-  if (state.sessionId) {
-    StorageService.saveChatHistory(state.sessionId, newMessages)
-      .catch(error => console.error('Error saving new message:', error));
-  }
-
-  return {
-    ...state,
-    messages: newMessages,
-  };
-
       case 'UPDATE_MESSAGE':
         const messageIndex = state.messages.findIndex(msg => msg.id === action.payload.id);
         if (messageIndex === -1) return state;
       
-        // Remove all messages after the edited one
         const updatedMessages = state.messages.slice(0, messageIndex + 1).map(msg =>
           msg.id === action.payload.id
             ? { ...msg, ...action.payload.message }
             : msg
         );
-      
-        // Save the updated messages
-        if (state.sessionId) {
-          StorageService.saveChatHistory(state.sessionId, updatedMessages)
-            .catch(error => console.error('Error saving edited message:', error));
-        }
       
         return {
           ...state,
