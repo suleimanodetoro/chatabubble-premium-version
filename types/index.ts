@@ -44,23 +44,22 @@ export interface Scenario {
 }
 
 export interface Session {
-  id: string;
-  userId: string;
-  scenarioId: string;
-  targetLanguage: Language;
-  sourceLanguage: Language;
-  messages: ChatMessage[];
-  startTime: number;
-  lastUpdated: number;
-  scenario?: Scenario;
-  // New fields
-  status: "active" | "completed" | "saved";
-  metrics?: {
-    messageCount?: number;
-    duration?: number;
-    lastUpdated?: number;
-  };
-}
+    id: string;
+    userId: string;
+    scenarioId: string;
+    target_language: Language;  // This is where one error occurs - targetLanguage might be undefined
+    sourceLanguage: Language;
+    messages: ChatMessage[];
+    startTime: number;
+    lastUpdated: number;
+    scenario?: Scenario;    // Optional - might cause issues if we're not checking
+    status: "active" | "completed" | "saved";
+    metrics?: {            // Optional - need to handle this in MetricsService
+      messageCount?: number;
+      duration?: number;
+      lastUpdated?: number;
+    };
+  }
 
 export const PREDEFINED_LANGUAGES: Language[] = [
   { code: "es", name: "Spanish", direction: "ltr" },

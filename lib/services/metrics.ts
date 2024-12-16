@@ -2,13 +2,34 @@
 import { supabase } from '@/lib/supabase/client';
 import { Session, Language } from '@/types';
 
+// Add types to match DB schema
+interface DBSession {
+  id: string;
+  user_id: string;
+  scenario_id: string;
+  target_language: Language;
+  source_language: Language;
+  messages: any[];
+  created_at: string;
+  updated_at: string;
+  status: 'active' | 'completed' | 'saved';
+  metrics: {
+    duration?: number;
+    messageCount?: number;
+    lastUpdated?: number;
+  };
+  scenario?: {
+    id: string;
+    title: string;
+    description: string;
+    // ... other scenario fields
+  };
+}
+
 interface UserMetrics {
-  // Session metrics
   totalSessions: number;
   completedSessions: number;
   totalMinutesPracticed: number;
-  
-  // Language metrics
   activeLanguages: number;
   languageProgress: Record<string, {
     sessionsCompleted: number;
@@ -17,8 +38,6 @@ interface UserMetrics {
     level: 'beginner' | 'intermediate' | 'advanced';
     recentSessions: Session[];
   }>;
-  
-  // Recent activity
   recentSessions: Session[];
   streak: number;
   lastPracticed: string | null;
@@ -27,7 +46,8 @@ interface UserMetrics {
 export class MetricsService {
   static async getUserMetrics(userId: string): Promise<UserMetrics> {
     try {
-      // Get all user sessions
+      console.log('Fetching metrics for user:', userId);
+
       const { data: sessions, error: sessionsError } = await supabase
         .from('chat_sessions')
         .select(`
@@ -38,8 +58,8 @@ export class MetricsService {
         .order('created_at', { ascending: false });
 
       if (sessionsError) throw sessionsError;
+      console.log('Fetched sessions:', sessions?.length);
 
-      // Get user profile for streak and language data
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -47,27 +67,48 @@ export class MetricsService {
         .single();
 
       if (profileError) throw profileError;
+      console.log('Fetched profile');
+
+      // Transform DB sessions to match our Session type
+      const transformedSessions = (sessions || []).map((dbSession: DBSession) => ({
+        id: dbSession.id,
+        userId: dbSession.user_id,
+        scenarioId: dbSession.scenario_id,
+        targetLanguage: dbSession.target_language,
+        sourceLanguage: dbSession.source_language,
+        messages: dbSession.messages || [],
+        startTime: new Date(dbSession.created_at).getTime(),
+        lastUpdated: new Date(dbSession.updated_at).getTime(),
+        status: dbSession.status,
+        metrics: dbSession.metrics || {},
+        scenario: dbSession.scenario
+      }));
 
       const metrics: UserMetrics = {
-        totalSessions: sessions.length,
-        completedSessions: sessions.filter(s => s.status === 'completed').length,
-        totalMinutesPracticed: sessions.reduce((total, session) => 
+        totalSessions: transformedSessions.length,
+        completedSessions: transformedSessions.filter(s => s.status === 'completed').length,
+        totalMinutesPracticed: transformedSessions.reduce((total, session) => 
           total + (session.metrics?.duration || 0) / 60000, 0),
         activeLanguages: Object.keys(profile.current_levels || {}).length,
         languageProgress: {},
-        recentSessions: sessions.slice(0, 5),
+        recentSessions: transformedSessions.slice(0, 5),
         streak: profile.daily_streak || 0,
         lastPracticed: profile.last_practice
       };
 
       // Calculate per-language metrics
-      sessions.forEach(session => {
-        const langCode = session.target_language.code;
+      transformedSessions.forEach(session => {
+        if (!session.targetLanguage?.code) {
+          console.warn('Session missing target language:', session.id);
+          return;
+        }
+
+        const langCode = session.targetLanguage.code;
         if (!metrics.languageProgress[langCode]) {
           metrics.languageProgress[langCode] = {
             sessionsCompleted: 0,
             totalDuration: 0,
-            lastPracticed: session.created_at,
+            lastPracticed: session.startTime.toString(),
             level: profile.current_levels?.[langCode] || 'beginner',
             recentSessions: []
           };
@@ -77,14 +118,13 @@ export class MetricsService {
         langMetrics.sessionsCompleted++;
         langMetrics.totalDuration += session.metrics?.duration || 0;
         
-        // Track most recent 3 sessions per language
         if (langMetrics.recentSessions.length < 3) {
           langMetrics.recentSessions.push(session);
         }
 
-        // Update last practiced if more recent
-        if (new Date(session.created_at) > new Date(langMetrics.lastPracticed)) {
-          langMetrics.lastPracticed = session.created_at;
+        const sessionDate = new Date(session.startTime);
+        if (sessionDate > new Date(langMetrics.lastPracticed)) {
+          langMetrics.lastPracticed = session.startTime.toString();
         }
       });
 
@@ -98,7 +138,7 @@ export class MetricsService {
   static async updateSessionMetrics(session: Session) {
     try {
       const metrics = await this.getUserMetrics(session.userId);
-      const langCode = session.targetLanguage.code;
+      const langCode = session.target_language.code;
       const sessionsCompleted = metrics.languageProgress[langCode]?.sessionsCompleted || 0;
 
       // Determine level based on completed sessions
