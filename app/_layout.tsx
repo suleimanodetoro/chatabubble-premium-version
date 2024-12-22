@@ -7,7 +7,9 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { supabase } from '@/lib/supabase/client';
 import { Session } from '@supabase/supabase-js';
 import { useAppStore } from '@/hooks/useAppStore';
+import { StorageService } from '@/lib/services/storage';
 
+// StorageService
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [session, setSession] = useState<Session | null>(null);
@@ -16,6 +18,13 @@ export default function RootLayout() {
   const segments = useSegments();
   const { setUser } = useAppStore();
 
+  // useEffect(() => {
+  //   const init = async () => {
+  //     await StorageService.clearAll();
+  //     console.log('Storage cleared');
+  //   };
+  //   init();
+  // }, []);
   // Initialize and monitor auth state
   useEffect(() => {
     console.log('Checking session...');
