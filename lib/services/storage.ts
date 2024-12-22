@@ -37,6 +37,25 @@ export class StorageService {
       throw error;
     }
   }
+  static async clearUserData(userId: string) {
+    try {
+      // Get all keys
+      const keys = await AsyncStorage.getAllKeys();
+      
+      // Filter keys related to user data
+      const userKeys = keys.filter(key => 
+        key.includes(`${CHAT_HISTORY_KEY}${userId}`) ||
+        key.includes(`${ACTIVE_SESSIONS_KEY}${userId}`) ||
+        key.includes(`@encryption_key_${userId}`)
+      );
+      
+      // Remove all user related data
+      await AsyncStorage.multiRemove(userKeys);
+    } catch (error) {
+      console.error('Error clearing user data:', error);
+      throw error;
+    }
+  }
 
   private static async loadWithChunking(key: string): Promise<string | null> {
     try {

@@ -47,7 +47,7 @@ export interface Session {
     id: string;
     userId: string;
     scenarioId: string;
-    target_language: Language;  // This is where one error occurs - targetLanguage might be undefined
+    target_language: Language;  
     sourceLanguage: Language;
     messages: ChatMessage[];
     startTime: number;

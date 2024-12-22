@@ -2,6 +2,8 @@
 
 import { supabase } from '../supabase/client';
 import { Session, ChatMessage } from '@/types';
+import { EncryptionService } from './encryption';
+
 
 interface SessionMetrics {
   messageCount: number;
@@ -13,8 +15,37 @@ interface SessionMetrics {
 }
 
 export class ChatService {
-  static async createOrUpdateSession(session: Session, messages: ChatMessage[]) {
+static async createOrUpdateSession(session: Session, messages: ChatMessage[]) {
     try {
+      console.log('Starting session save:', {
+        sessionId: session.id,
+        userId: session.userId,
+        messageCount: messages.length
+      });
+  
+      if (!session.target_language && session.scenario?.targetLanguage) {
+        session = {
+          ...session,
+          target_language: session.scenario.targetLanguage
+        };
+      }
+  
+      if (!session.target_language) {
+        console.error('Missing target language:', session);
+        throw new Error('Target language is required');
+      }
+  
+      // Get encryption key
+      const key = await EncryptionService.getEncryptionKey(session.userId);
+      console.log('Encryption status:', { hasKey: !!key });
+  
+      // Encrypt messages if we have a key
+      const processedMessages = await Promise.all(
+        messages.map(msg => 
+          key ? EncryptionService.encryptChatMessage(msg, session.userId) : msg
+        )
+      );
+  
       const metrics = this.calculateMetrics(session, messages);
       
       const { data, error } = await supabase
@@ -23,16 +54,16 @@ export class ChatService {
           id: session.id,
           user_id: session.userId,
           scenario_id: session.scenarioId,
-          messages: messages,
+          messages: processedMessages,
           source_language: session.sourceLanguage,
-          target_language: session.targetLanguage,
+          target_language: session.target_language,
           status: session.status,
           metrics,
           updated_at: new Date().toISOString()
         })
         .select()
         .single();
-
+  
       if (error) throw error;
       return data;
     } catch (error) {
