@@ -1,11 +1,11 @@
 // app/(auth)/register.tsx
-
 import { useState } from 'react';
 import { StyleSheet, TextInput, Pressable, Alert } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { supabase } from '@/lib/supabase/client';
+import { EncryptionService } from '@/lib/services/encryption';
 
 export default function RegisterScreen() {
   const [email, setEmail] = useState('');
@@ -28,6 +28,7 @@ export default function RegisterScreen() {
     setLoading(true);
 
     try {
+      // 1. Register with Supabase
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -36,18 +37,29 @@ export default function RegisterScreen() {
       if (error) throw error;
 
       if (data.user) {
-        Alert.alert(
-          'Registration Successful',
-          'Please check your email for verification instructions.',
-          [
-            {
-              text: 'OK',
-              onPress: () => router.replace('/login'),
-            },
-          ]
-        );
+        try {
+          // 2. Generate initial encryption key
+          await EncryptionService.generateUserKey(data.user.id, password);
+          
+          Alert.alert(
+            'Registration Successful',
+            'Please check your email for verification instructions.',
+            [
+              {
+                text: 'OK',
+                onPress: () => router.replace('/login'),
+              },
+            ]
+          );
+        } catch (encryptionError) {
+          console.error('Encryption setup error:', encryptionError);
+          // Cleanup if encryption setup fails
+          await supabase.auth.signOut();
+          throw new Error('Failed to setup secure storage');
+        }
       }
     } catch (error) {
+      console.error('Registration error:', error);
       Alert.alert('Error', (error as Error).message);
     } finally {
       setLoading(false);
@@ -57,7 +69,7 @@ export default function RegisterScreen() {
   return (
     <ThemedView style={styles.container}>
       <ThemedText style={styles.title}>Create Account</ThemedText>
-
+      
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -66,7 +78,7 @@ export default function RegisterScreen() {
         autoCapitalize="none"
         keyboardType="email-address"
       />
-
+      
       <TextInput
         style={styles.input}
         placeholder="Password"
@@ -74,7 +86,7 @@ export default function RegisterScreen() {
         onChangeText={setPassword}
         secureTextEntry
       />
-
+      
       <TextInput
         style={styles.input}
         placeholder="Confirm Password"
@@ -82,7 +94,7 @@ export default function RegisterScreen() {
         onChangeText={setConfirmPassword}
         secureTextEntry
       />
-
+      
       <Pressable
         style={[styles.button, loading && styles.buttonDisabled]}
         onPress={handleRegister}

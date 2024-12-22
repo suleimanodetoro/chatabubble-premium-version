@@ -5,6 +5,7 @@ import { StyleSheet, TextInput, Pressable, Alert } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
+import { EncryptionService } from '@/lib/services/encryption';
 import { supabase } from '@/lib/supabase/client';
 
 export default function LoginScreen() {
@@ -18,21 +19,36 @@ export default function LoginScreen() {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
-
+  
     setLoading(true);
-
+  
     try {
+      console.log('Attempting login...');
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-
+  
       if (error) throw error;
-
+  
       if (data.user) {
-        router.replace('/(tabs)');
+        console.log('Login successful, generating encryption key...');
+        try {
+          await EncryptionService.generateUserKey(data.user.id, password);
+          console.log('Encryption key generated successfully');
+          
+          // Verify key was stored
+          const key = await EncryptionService.getEncryptionKey(data.user.id);
+          console.log('Encryption key verification:', !!key);
+          
+          router.replace('/(tabs)');
+        } catch (encryptionError) {
+          console.error('Encryption key generation failed:', encryptionError);
+          throw encryptionError;
+        }
       }
     } catch (error) {
+      console.error('Login error:', error);
       Alert.alert('Error', (error as Error).message);
     } finally {
       setLoading(false);
