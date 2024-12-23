@@ -10,7 +10,14 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.suleimanao.chata-bubble"
+      "bundleIdentifier": "com.suleimanao.chata-bubble",
+      "infoPlist": {
+        "SKAdNetworkItems": [
+          {
+            "SKAdNetworkIdentifier": "2U9PT9HC89.skadnetwork"
+          }
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
