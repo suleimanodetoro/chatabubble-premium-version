@@ -5,6 +5,11 @@ export interface Language {
   direction: "ltr" | "rtl";
   isCustom?: boolean;
 }
+export interface SubscriptionStatus {
+    isSubscribed: boolean;
+    expiryDate?: string;
+    plan?: string;
+  }
 
 export interface User {
   id: string;
@@ -12,6 +17,8 @@ export interface User {
   email: string;
   nativeLanguage: Language;
   learningLanguages: Language[];
+  subscription?: SubscriptionStatus;
+
   currentLevel: {
     [languageCode: string]: "beginner" | "intermediate" | "advanced";
   };
