@@ -291,7 +291,7 @@ export const ChatBubble = memo(function ChatBubble({
 const styles = StyleSheet.create({
   container: {
     width: "100%",
-    paddingHorizontal: 16,
+    paddingHorizontal: 4,
     marginVertical: 4,
   },
   bubble: {
