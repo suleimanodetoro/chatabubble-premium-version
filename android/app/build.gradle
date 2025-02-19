@@ -86,9 +86,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.anonymous.chatabubble'
+    namespace 'com.chatabubble.mobile'
     defaultConfig {
-        applicationId 'com.anonymous.chatabubble'
+        applicationId 'com.chatabubble.mobile'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

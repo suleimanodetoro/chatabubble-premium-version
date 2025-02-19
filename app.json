@@ -1,16 +1,17 @@
 {
   "expo": {
-    "name": "chata-bubble",
-    "slug": "chata-bubble",
+    "name": "Chatabubble",
+    "slug": "chatabubble",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "chatabubble",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.suleimanao.chata-bubble",
+      "bundleIdentifier": "com.chatabubble.mobile",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "SKAdNetworkItems": [
           {
@@ -24,7 +25,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.suleimanao.chatabubble"
+      "package": "com.chatabubble.mobile"
     },
     "web": {
       "bundler": "metro",

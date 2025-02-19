@@ -25,7 +25,7 @@
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="chatabubble"/>
-        <data android:scheme="com.anonymous.chatabubble"/>
+        <data android:scheme="com.chatabubble.mobile"/>
       </intent-filter>
     </activity>
   </application>

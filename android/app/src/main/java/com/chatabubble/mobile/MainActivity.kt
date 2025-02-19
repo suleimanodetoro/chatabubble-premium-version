@@ -1,4 +1,4 @@
-package com.anonymous.chatabubble
+package com.chatabubble.mobile
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

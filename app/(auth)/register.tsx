@@ -4,8 +4,7 @@ import { StyleSheet, TextInput, Pressable, Alert } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { supabase } from '@/lib/supabase/client';
-import { EncryptionService } from '@/lib/services/encryption';
+import { AuthService } from '@/lib/services/auth';
 
 export default function RegisterScreen() {
   const [email, setEmail] = useState('');
@@ -28,36 +27,17 @@ export default function RegisterScreen() {
     setLoading(true);
 
     try {
-      // 1. Register with Supabase
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
-      if (data.user) {
-        try {
-          // 2. Generate initial encryption key
-          await EncryptionService.generateUserKey(data.user.id, password);
-          
-          Alert.alert(
-            'Registration Successful',
-            'Please check your email for verification instructions.',
-            [
-              {
-                text: 'OK',
-                onPress: () => router.replace('/login'),
-              },
-            ]
-          );
-        } catch (encryptionError) {
-          console.error('Encryption setup error:', encryptionError);
-          // Cleanup if encryption setup fails
-          await supabase.auth.signOut();
-          throw new Error('Failed to setup secure storage');
-        }
-      }
+      await AuthService.signUp(email, password);
+      Alert.alert(
+        'Registration Successful',
+        'Please check your email for verification instructions.',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.replace('/login'),
+          },
+        ]
+      );
     } catch (error) {
       console.error('Registration error:', error);
       Alert.alert('Error', (error as Error).message);

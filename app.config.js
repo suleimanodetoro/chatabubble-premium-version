@@ -5,10 +5,10 @@ export default {
   expo: {
     scheme: "chatabubble",
     android: {
-      package: "com.anonymous.chatabubble"
+      package: "com.chatabubble.mobile"
     },
     ios: {
-      bundleIdentifier: "com.anonymous.chatabubble"
+      bundleIdentifier: "com.chatabubble.mobile"
     },
     extra: {
       OPENAI_API_KEY: process.env.EXPO_PUBLIC_OPENAI_API_KEY,
