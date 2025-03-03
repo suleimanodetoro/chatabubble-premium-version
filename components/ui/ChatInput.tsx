@@ -13,7 +13,7 @@ import { ThemedText } from "../ThemedText";
 import { useChatContext } from "../../contexts/ChatContext";
 import { useAppStore } from "../../hooks/useAppStore";
 import { OpenAIService } from "../../lib/services/openai";
-import { Language } from "../../types";
+import { Language, ChatMessage } from "../../types"; // Make sure ChatMessage is explicitly imported
 import { StorageService } from "../../lib/services/storage";
 import { generateId } from "@/lib/utils/ids";
 
@@ -48,14 +48,14 @@ export const ChatInput = memo(function ChatInput({
     dispatch({ type: "SET_LOADING", payload: true });
 
     try {
-      // Create initial user message
-      const userMessage = {
+      // Create initial user message with explicit type annotation
+      const userMessage: ChatMessage = {
         id: generateId(),
         content: {
           original: trimmedText,
           translated: "Translating...",
         },
-        sender: "user",
+        sender: "user", // Use literal string "user"
         timestamp: Date.now(),
         isEdited: false,
       };
@@ -69,7 +69,7 @@ export const ChatInput = memo(function ChatInput({
       );
 
       // Update user message with translation
-      const updatedUserMessage = {
+      const updatedUserMessage: ChatMessage = {
         ...userMessage,
         content: {
           original: trimmedText,
@@ -99,13 +99,13 @@ export const ChatInput = memo(function ChatInput({
       );
 
       // Create and add AI message
-      const aiMessage = {
+      const aiMessage: ChatMessage = {
         id: generateId(),
         content: {
           original: aiResponse,
           translated: translatedAiResponse,
         },
-        sender: "assistant",
+        sender: "assistant", // Use literal string "assistant"
         timestamp: Date.now(),
         isEdited: false,
       };
@@ -116,7 +116,7 @@ export const ChatInput = memo(function ChatInput({
       if (currentSession) {
         const updatedSession = {
           ...currentSession,
-          messages: [...state.messages, updatedUserMessage, aiMessage],
+          messages: [...state.messages, updatedUserMessage, aiMessage] as ChatMessage[], // Use type assertion
           lastUpdated: Date.now(),
         };
         // Log before saving

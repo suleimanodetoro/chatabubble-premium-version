@@ -11,8 +11,8 @@ interface AppState {
   user: User | null;
   currentSession: Session | null;
   currentScenario: Scenario | null;
-  targetLanguage: Language | null;
-  sourceLanguage: Language | null;
+  target_language: Language | null;
+  source_language: Language | null;
   scenarios: Scenario[];
   activeSessions: Record<string, Session>;
   isPremium: boolean; // Add this
@@ -22,8 +22,8 @@ interface AppState {
   setUser: (user: User | null) => void;
   setCurrentSession: (session: Session | null) => void;
   setCurrentScenario: (scenario: Scenario | null) => void;
-  setTargetLanguage: (language: Language | null) => void;
-  setSourceLanguage: (language: Language | null) => void;
+  settarget_language: (language: Language | null) => void;
+  setsource_language: (language: Language | null) => void;
   addScenario: (scenario: Scenario) => void;
   saveSession: (session: Session) => Promise<void>;
   loadSession: (sessionId: string) => Promise<Session | null>;
@@ -42,8 +42,8 @@ export const useAppStore = create<AppState>()(
       user: null,
       currentSession: null,
       currentScenario: null,
-      targetLanguage: null,
-      sourceLanguage: DEFAULT_SOURCE_LANGUAGE,
+      target_language: null,
+      source_language: DEFAULT_SOURCE_LANGUAGE,
       scenarios: [],
       activeSessions: {},
       isPremium: false, 
@@ -51,8 +51,8 @@ export const useAppStore = create<AppState>()(
       setUser: (user) => set({ user }),
       setCurrentSession: (session) => set({ currentSession: session }),
       setCurrentScenario: (scenario) => set({ currentScenario: scenario }),
-      setTargetLanguage: (language) => set({ targetLanguage: language }),
-      setSourceLanguage: (language) => set({ sourceLanguage: language }),
+      settarget_language: (language) => set({ target_language: language }),
+      setsource_language: (language) => set({ source_language: language }),
       setIsPremium: (status) => set({ isPremium: status }), 
       
 
@@ -83,7 +83,7 @@ export const useAppStore = create<AppState>()(
                 [session.id]: sessionToSave,
               },
               currentSession: sessionToSave,
-              targetLanguage: session.targetLanguage,
+              target_language: session.target_language,
             }));
           } catch (error) {
             console.error("Error saving session:", error);
@@ -106,7 +106,7 @@ export const useAppStore = create<AppState>()(
                 [sessionId]: storedSession,
               },
               currentSession: storedSession,  // Added line
-              targetLanguage: storedSession.targetLanguage, // Added line
+              target_language: storedSession.target_language, // Added line
             }));
             return storedSession;
           }
@@ -114,13 +114,13 @@ export const useAppStore = create<AppState>()(
           // Fallback to store state if not found in storage
           const session = get().activeSessions[sessionId];
           if (session) {
-            set({ targetLanguage: session.targetLanguage });
+            set({ target_language: session.target_language });
           }
           
           console.log("Loading session:", {
             sessionId,
             found: !!session,
-            targetLanguage: session?.targetLanguage,
+            target_language: session?.target_language,
           });
           
           return session || null;
@@ -144,7 +144,7 @@ loadScenarios: async () => {
 
     const transformedScenarios = scenarios.map(scenario => ({
       ...scenario,
-      targetLanguage: scenario.target_language,
+      target_language: scenario.target_language,
       category: scenario.category,
       difficulty: scenario.difficulty,
       persona: scenario.persona,
@@ -162,7 +162,7 @@ loadScenarios: async () => {
       partialize: (state) => ({
         scenarios: state.scenarios,
         activeSessions: state.activeSessions,
-        sourceLanguage: state.sourceLanguage,
+        source_language: state.source_language,
         user: state.user,
         isPremium: state.isPremium, 
       }),

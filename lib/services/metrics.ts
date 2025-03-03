@@ -74,8 +74,8 @@ export class MetricsService {
         id: dbSession.id,
         userId: dbSession.user_id,
         scenarioId: dbSession.scenario_id,
-        targetLanguage: dbSession.target_language,
-        sourceLanguage: dbSession.source_language,
+        target_language: dbSession.target_language,
+        source_language: dbSession.source_language,
         messages: dbSession.messages || [],
         startTime: new Date(dbSession.created_at).getTime(),
         lastUpdated: new Date(dbSession.updated_at).getTime(),
@@ -98,12 +98,12 @@ export class MetricsService {
 
       // Calculate per-language metrics
       transformedSessions.forEach(session => {
-        if (!session.targetLanguage?.code) {
+        if (!session.target_language?.code) {
           console.warn('Session missing target language:', session.id);
           return;
         }
 
-        const langCode = session.targetLanguage.code;
+        const langCode = session.target_language.code;
         if (!metrics.languageProgress[langCode]) {
           metrics.languageProgress[langCode] = {
             sessionsCompleted: 0,

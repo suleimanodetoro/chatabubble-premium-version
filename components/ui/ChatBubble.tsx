@@ -18,9 +18,9 @@ export const ChatBubble = memo(function ChatBubble({
   message: ChatMessage;
 }) {
   const { state, dispatch } = useChatContext();
-  const sourceLanguage = useAppStore((state) => state.sourceLanguage);
+  const source_language = useAppStore((state) => state.source_language);
   const currentSession = useAppStore((state) => state.currentSession);
-  const targetLanguage = useAppStore((state) => state.targetLanguage);
+  const target_language = useAppStore((state) => state.target_language);
   const currentScenario = useAppStore((state) => state.currentScenario);
   const setCurrentSession = useAppStore((state) => state.setCurrentSession);
 
@@ -43,7 +43,7 @@ export const ChatBubble = memo(function ChatBubble({
 
     try {
       const textToSpeak = message.content.original;
-      const languageToSpeak = isUser ? sourceLanguage : currentSession?.targetLanguage;
+      const languageToSpeak = isUser ? source_language : currentSession?.target_language;
 
       if (!languageToSpeak) {
         console.error("No language available for speech");
@@ -58,7 +58,7 @@ export const ChatBubble = memo(function ChatBubble({
     } finally {
       setIsSpeaking(false);
     }
-  }, [message.content.original, isUser, sourceLanguage, currentSession?.targetLanguage, isSpeaking]);
+  }, [message.content.original, isUser, source_language, currentSession?.target_language, isSpeaking]);
 
   const handleStop = useCallback(async () => {
     try {
@@ -70,14 +70,14 @@ export const ChatBubble = memo(function ChatBubble({
 
   const handleEdit = useCallback(
     async (editType: "original" | "translation") => {
-      if (!targetLanguage || !currentScenario) {
-        console.log('Missing targetLanguage or currentScenario:', { targetLanguage, currentScenario });
+      if (!target_language || !currentScenario) {
+        console.log('Missing targetLanguage or currentScenario:', { target_language, currentScenario });
         return;
       }
-
+  
       const textToEdit =
         editType === "original" ? message.content.original : message.content.translated;
-
+  
       Alert.prompt(
         "Edit Message",
         `Edit ${editType === "original" ? "message" : "translation"}:`,
@@ -87,22 +87,22 @@ export const ChatBubble = memo(function ChatBubble({
             text: "Save",
             onPress: async (newText?: string) => {
               if (!newText?.trim()) return;
-
+  
               dispatch({ type: "SET_LOADING", payload: true });
-
+  
               try {
                 // Get the index of the current message
                 const messageIndex = state.messages.findIndex(m => m.id === message.id);
                 if (messageIndex === -1) return;
-
-                let updatedMessage;
-
+  
+                let updatedMessage: ChatMessage; // Add explicit type annotation
+  
                 if (message.sender === 'assistant') {
                   if (editType === 'translation') {
                     // If editing English translation of AI message, translate to target language
                     const newOriginal = await OpenAIService.translateText(
                       newText,
-                      targetLanguage.name
+                      target_language.name
                     );
                     updatedMessage = {
                       ...message,
@@ -111,6 +111,7 @@ export const ChatBubble = memo(function ChatBubble({
                         translated: newText,    // User's edited English
                       },
                       isEdited: true,
+                      sender: message.sender as "assistant", // Force the correct type
                     };
                   } else {
                     // If editing target language of AI message, translate to English
@@ -125,15 +126,16 @@ export const ChatBubble = memo(function ChatBubble({
                         translated: newTranslation, // New English translation
                       },
                       isEdited: true,
+                      sender: message.sender as "assistant", // Force the correct type
                     };
                   }
                 } else {
                   // Original user message handling
                   const translationResult = await OpenAIService.translateText(
                     newText,
-                    editType === "original" ? targetLanguage.name : "English"
+                    editType === "original" ? target_language.name : "English"
                   );
-
+  
                   updatedMessage = {
                     ...message,
                     content: {
@@ -141,19 +143,20 @@ export const ChatBubble = memo(function ChatBubble({
                       translated: editType === "original" ? translationResult : newText,
                     },
                     isEdited: true,
+                    sender: message.sender as "user", // Force the correct type
                   };
                 }
-
+  
                 // Update messages list
                 const newMessageList = state.messages.slice(0, messageIndex + 1);
                 newMessageList[messageIndex] = updatedMessage;
-
+  
                 // Dispatch update
                 dispatch({
                   type: 'LOAD_MESSAGES',
                   payload: newMessageList
                 });
-
+  
                 // Save the updated messages to storage
                 if (currentSession) {
                   const updatedSession = {
@@ -164,46 +167,46 @@ export const ChatBubble = memo(function ChatBubble({
                   await StorageService.saveSession(updatedSession);
                   setCurrentSession(updatedSession);
                 }
-
+  
                 // Only generate new AI response for user message edits
                 if (message.sender === 'user') {
                   const aiResponse = await OpenAIService.generateChatCompletion(
                     newMessageList,
                     currentScenario,
-                    targetLanguage.name
+                    target_language.name
                   );
-
+  
                   const translatedResponse = await OpenAIService.translateText(
                     aiResponse,
                     'English'
                   );
-
-                  const newAiMessage = {
+  
+                  const newAiMessage: ChatMessage = { // Add explicit type annotation
                     id: generateId(),
                     content: {
                       original: aiResponse,
                       translated: translatedResponse
                     },
-                    sender: 'assistant',
+                    sender: "assistant", // Use string literal directly
                     timestamp: Date.now(),
                     isEdited: false
                   };
-
+  
                   // Add AI response and update storage again
                   const finalMessageList = [...newMessageList, newAiMessage];
                   dispatch({ type: 'ADD_MESSAGE', payload: newAiMessage });
-
+  
                   if (currentSession) {
                     const finalSession = {
                       ...currentSession,
-                      messages: finalMessageList,
+                      messages: finalMessageList as ChatMessage[], // Cast to the correct type
                       lastUpdated: Date.now(),
                     };
                     await StorageService.saveSession(finalSession);
                     setCurrentSession(finalSession);
                   }
                 }
-
+  
               } catch (error) {
                 console.error('Edit error:', error);
                 Alert.alert("Error", "Failed to save edit: " + (error as Error).message);
@@ -217,7 +220,7 @@ export const ChatBubble = memo(function ChatBubble({
         textToEdit
       );
     },
-    [message, targetLanguage, dispatch, state.messages, currentScenario, currentSession, setCurrentSession]
+    [message, target_language, dispatch, state.messages, currentScenario, currentSession, setCurrentSession]
   );
 
   const handleLongPress = useCallback(() => {

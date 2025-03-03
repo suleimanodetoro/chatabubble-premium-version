@@ -1,17 +1,18 @@
 // app/_layout.tsx
-import 'react-native-get-random-values';
-import { useEffect, useState, useRef } from 'react';
-import { Stack } from 'expo-router';
-import { useRouter, useSegments } from 'expo-router';
-import { useColorScheme } from '@/hooks/useColorScheme';
-import { supabase } from '@/lib/supabase/client';
-import { Session } from '@supabase/supabase-js';
-import { useAppStore } from '@/hooks/useAppStore';
-import * as Linking from 'expo-linking';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SubscriptionService } from '@/lib/services/subscription';
-import Purchases from 'react-native-purchases';
-Purchases.setLogLevel(Purchases.LOG_LEVEL.VERBOSE)
+import "react-native-get-random-values";
+import { useEffect, useState, useRef } from "react";
+import { Stack } from "expo-router";
+import { useRouter, useSegments } from "expo-router";
+import { useColorScheme } from "@/hooks/useColorScheme";
+import { supabase } from "@/lib/supabase/client";
+import { Session } from "@supabase/supabase-js";
+import { useAppStore } from "@/hooks/useAppStore";
+import * as Linking from "expo-linking";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { SubscriptionService } from "@/lib/services/subscription";
+import { ProfileService } from "@/lib/services/profile";
+import Purchases from "react-native-purchases";
+Purchases.setLogLevel(Purchases.LOG_LEVEL.VERBOSE);
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -28,44 +29,65 @@ export default function RootLayout() {
     async function initServices() {
       try {
         await SubscriptionService.initialize();
-        
+
         // Set up purchase listener for subscription changes
-        const purchaseListener = Purchases.addCustomerInfoUpdateListener((info) => {
-          const isPremium = info.entitlements.active['premium_access']?.isActive ?? false;
-          if (typeof useAppStore.getState().setIsPremium === 'function') {
+        Purchases.addCustomerInfoUpdateListener((info) => {
+          const isPremium =
+            info.entitlements.active["premium_access"]?.isActive ?? false;
+          if (typeof useAppStore.getState().setIsPremium === "function") {
             useAppStore.getState().setIsPremium(isPremium);
-            console.log('Subscription status updated:', isPremium);
+            console.log("Subscription status updated:", isPremium);
           }
         });
-        
+
         return () => {
-          purchaseListener.remove();
+          // No explicit cleanup needed as the SDK handles this internally
         };
       } catch (error) {
-        console.error('Error initializing services:', error);
+        console.error("Error initializing services:", error);
       }
     }
-    
+
     const initializeAuth = async () => {
       try {
         // Check for stored session
-        const storedAuth = await AsyncStorage.getItem('supabase.auth.token');
+        const storedAuth = await AsyncStorage.getItem("supabase.auth.token");
         if (storedAuth) {
           const { access_token } = JSON.parse(storedAuth);
           if (access_token) {
             await supabase.auth.setSession({
               access_token,
-              refresh_token: ''
+              refresh_token: "",
             });
           }
         }
 
-        const { data: { session } } = await supabase.auth.getSession();
-        console.log('Initial session check:', session ? 'Has session' : 'No session');
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        console.log(
+          "Initial session check:",
+          session ? "Has session" : "No session"
+        );
         setSession(session);
-        setUser(session?.user ?? null);
+
+        if (session?.user) {
+          // Get the user profile from the database
+          const profile = await ProfileService.getProfile(session.user.id);
+
+          // Set user in app store with the basic auth info if no profile found
+          setUser(
+            profile || {
+              id: session.user.id,
+              email: session.user.email,
+              name: session.user.email?.split("@")[0] || "",
+            }
+          );
+        } else {
+          setUser(null);
+        }
       } catch (error) {
-        console.error('Auth initialization error:', error);
+        console.error("Auth initialization error:", error);
       } finally {
         setIsLoading(false);
       }
@@ -73,27 +95,45 @@ export default function RootLayout() {
 
     const cleanup = initServices();
     initializeAuth();
-    
+
     return () => {
-      cleanup.then(cleanupFn => cleanupFn && cleanupFn());
+      cleanup.then((cleanupFn) => cleanupFn && cleanupFn());
     };
   }, []);
 
   // Handle auth state changes
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session ? 'Has session' : 'No session');
-      
-      if (event === 'SIGNED_IN' && session && !authChangeHandled.current) {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log(
+        "Auth state changed:",
+        event,
+        session ? "Has session" : "No session"
+      );
+
+      if (event === "SIGNED_IN" && session && !authChangeHandled.current) {
         authChangeHandled.current = true;
         setSession(session);
-        setUser(session.user);
-        router.replace('/(tabs)');
-      } else if (event === 'SIGNED_OUT') {
+
+        // Get the complete user profile
+        const profile = await ProfileService.getProfile(session.user.id);
+
+        // Use profile data if available, otherwise use basic auth info
+        setUser(
+          profile || {
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.email?.split("@")[0] || "",
+          }
+        );
+
+        router.replace("/(tabs)");
+      } else if (event === "SIGNED_OUT") {
         setSession(null);
         setUser(null);
-        await AsyncStorage.removeItem('supabase.auth.token');
-        router.replace('/(auth)/login');
+        await AsyncStorage.removeItem("supabase.auth.token");
+        router.replace("/(auth)/login");
       }
     });
 
@@ -105,22 +145,36 @@ export default function RootLayout() {
   // Handle deep linking
   useEffect(() => {
     const handleDeepLink = async ({ url }: { url: string }) => {
-      console.log('Deep link received:', url);
-      
-      if (url.includes('auth/callback') || url.includes('auth/debug')) {
-        console.log('Auth callback detected');
-        const { data: { session } } = await supabase.auth.getSession();
-        
+      console.log("Deep link received:", url);
+
+      if (url.includes("auth/callback") || url.includes("auth/debug")) {
+        console.log("Auth callback detected");
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
         if (session?.user) {
-          console.log('Valid session found in callback, redirecting to tabs');
+          console.log("Valid session found in callback, redirecting to tabs");
           setSession(session);
-          setUser(session.user);
-          router.replace('/(tabs)');
+
+          // Get the complete user profile
+          const profile = await ProfileService.getProfile(session.user.id);
+
+          // Use profile data if available, otherwise use basic auth info
+          setUser(
+            profile || {
+              id: session.user.id,
+              email: session.user.email,
+              name: session.user.email?.split("@")[0] || "",
+            }
+          );
+
+          router.replace("/(tabs)");
         }
       }
     };
 
-    const subscription = Linking.addEventListener('url', handleDeepLink);
+    const subscription = Linking.addEventListener("url", handleDeepLink);
     return () => {
       subscription.remove();
     };
@@ -130,11 +184,11 @@ export default function RootLayout() {
   useEffect(() => {
     if (isLoading) return;
 
-    const inAuthGroup = segments[0] === '(auth)';
-    
+    const inAuthGroup = segments[0] === "(auth)";
+
     if (!session && !inAuthGroup) {
-      console.log('No session, protecting route');
-      router.replace('/(auth)/login');
+      console.log("No session, protecting route");
+      router.replace("/(auth)/login");
     }
   }, [session, segments, isLoading]);
 
@@ -144,10 +198,10 @@ export default function RootLayout() {
 
   const commonStackOptions = {
     headerStyle: {
-      backgroundColor: colorScheme === 'dark' ? '#000' : '#fff',
+      backgroundColor: colorScheme === "dark" ? "#000" : "#fff",
     },
     headerShown: false,
-    headerTintColor: colorScheme === 'dark' ? '#fff' : '#000',
+    headerTintColor: colorScheme === "dark" ? "#fff" : "#000",
     headerShadowVisible: false,
   };
 
@@ -161,14 +215,14 @@ export default function RootLayout() {
       <Stack.Screen
         name="(chat)"
         options={{
-          presentation: 'fullScreenModal',
+          presentation: "fullScreenModal",
         }}
       />
       <Stack.Screen
         name="create-scenario"
         options={{
-          presentation: 'modal',
-          title: 'Create Scenario',
+          presentation: "modal",
+          title: "Create Scenario",
         }}
       />
     </Stack>

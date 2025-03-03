@@ -43,7 +43,7 @@ export function SessionHistory() {
         {session.scenario?.title || 'Unnamed Session'}
       </ThemedText>
       <ThemedText style={styles.sessionInfo}>
-        {session.targetLanguage.name} • {
+        {session.target_language.name} • {
           new Date(session.startTime).toLocaleDateString()
         }
       </ThemedText>

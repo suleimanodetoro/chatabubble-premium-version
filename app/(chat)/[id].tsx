@@ -99,9 +99,9 @@ export default function ChatScreen() {
               {currentScenario.title}
             </ThemedText>
           )}
-          {currentSession?.targetLanguage && (
+          {currentSession?.target_language && (
             <ThemedText style={styles.headerLanguage}>
-              {currentSession.targetLanguage.name}
+              {currentSession.target_language.name}
             </ThemedText>
           )}
         </View>
@@ -119,7 +119,7 @@ export default function ChatScreen() {
         <ChatMessages />
         <View style={[styles.inputWrapper, { paddingBottom: insets.bottom }]}>
           <ChatInput
-            sessionLanguage={currentSession?.targetLanguage ?? null}
+            sessionLanguage={currentSession?.target_language ?? null}
             disabled={state.status !== "active"}
           />
         </View>

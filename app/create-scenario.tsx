@@ -83,7 +83,7 @@ export default function CreateScenarioScreen() {
             personality: personaPersonality.trim() || 'Friendly and professional',
             languageStyle: languageStyle as 'formal' | 'casual' | 'mixed',
           },
-          targetLanguage: selectedLanguage,
+          target_language: selectedLanguage,
         };
   
         // First save to Supabase

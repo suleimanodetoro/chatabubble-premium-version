@@ -14,7 +14,7 @@ export class ScenarioService {
           description: scenario.description,
           category: scenario.category,
           difficulty: scenario.difficulty,
-          target_language: scenario.targetLanguage,
+          target_language: scenario.target_language,
           persona: scenario.persona,
           created_by: userId,
           is_public: false

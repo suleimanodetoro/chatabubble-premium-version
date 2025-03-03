@@ -3,8 +3,8 @@ import { Language } from '../../types';
 
 export async function translateText(
   text: string,
-  sourceLanguage: Language,
-  targetLanguage: Language
+  source_language: Language,
+  target_language: Language
 ): Promise<string> {
   // TODO: Replace with your preferred translation API
   // Example using a mock API for now
@@ -17,8 +17,8 @@ export async function translateText(
       },
       body: JSON.stringify({
         text,
-        source: sourceLanguage.code,
-        target: targetLanguage.code,
+        source: source_language.code,
+        target: target_language.code,
       }),
     });
 

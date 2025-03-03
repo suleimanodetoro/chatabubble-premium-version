@@ -6,9 +6,9 @@ import { ThemedText } from "@/components/ThemedText";
 import { HelloWave } from "@/components/HelloWave";
 import { useAppStore } from "@/hooks/useAppStore";
 import { Session } from "@/types";
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect } from 'react';
-import { MetricsService } from '@/lib/services/metrics';
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useState, useEffect } from "react";
+import { MetricsService } from "@/lib/services/metrics";
 
 // Add proper typing for metrics
 interface UserMetrics {
@@ -16,13 +16,16 @@ interface UserMetrics {
   completedSessions: number;
   totalMinutesPracticed: number;
   activeLanguages: number;
-  languageProgress: Record<string, {
-    sessionsCompleted: number;
-    totalDuration: number;
-    lastPracticed: string;
-    level: 'beginner' | 'intermediate' | 'advanced';
-    recentSessions: Session[];
-  }>;
+  languageProgress: Record<
+    string,
+    {
+      sessionsCompleted: number;
+      totalDuration: number;
+      lastPracticed: string;
+      level: "beginner" | "intermediate" | "advanced";
+      recentSessions: Session[];
+    }
+  >;
   recentSessions: Session[];
   streak: number;
   lastPracticed: string | null;
@@ -46,15 +49,14 @@ export default function HomeScreen() {
     try {
       setIsLoading(true);
       const userMetrics = await MetricsService.getUserMetrics(user.id);
-      console.log('Loaded metrics:', userMetrics); // Debug log
+      console.log("Loaded metrics:", userMetrics); // Debug log
       setMetrics(userMetrics);
     } catch (error) {
-      console.error('Error loading metrics:', error);
+      console.error("Error loading metrics:", error);
     } finally {
       setIsLoading(false);
     }
   };
-
   const renderWelcomeSection = () => (
     <ThemedView style={styles.welcomeSection}>
       <HelloWave />
@@ -62,9 +64,9 @@ export default function HomeScreen() {
         <ThemedText style={styles.welcomeText}>
           Welcome back{user?.name ? `, ${user.name}` : ""}!
         </ThemedText>
-        {metrics?.streak > 0 && (
+        {(metrics?.streak ?? 0) > 0 && (
           <ThemedText style={styles.streakText}>
-            🔥 {metrics.streak} day streak
+            🔥 {metrics?.streak} day streak
           </ThemedText>
         )}
       </View>
@@ -95,7 +97,9 @@ export default function HomeScreen() {
       </ThemedView>
       <ThemedView style={styles.statCard}>
         <ThemedText style={styles.statNumber}>
-          {isLoading ? "..." : Object.keys(metrics?.languageProgress || {}).length}
+          {isLoading
+            ? "..."
+            : Object.keys(metrics?.languageProgress || {}).length}
         </ThemedText>
         <ThemedText style={styles.statLabel}>Languages</ThemedText>
       </ThemedView>
@@ -103,64 +107,64 @@ export default function HomeScreen() {
   );
 
   // In renderRecentSection:
-const renderRecentSection = () => {
-  const recentSessions = metrics?.recentSessions || [];
-  
-  return (
-    <ThemedView style={styles.recentSection}>
-      <ThemedText style={styles.sectionTitle}>Recent Activity</ThemedText>
-      {recentSessions.length > 0 ? (
-        <View>
-          {recentSessions.map((session) => {
-            // Check if the session has the required data
-            if (!session?.target_language?.name) {
-              console.warn('Session missing target language:', session);
-              return null;
-            }
+  const renderRecentSection = () => {
+    const recentSessions = metrics?.recentSessions || [];
 
-            return (
-              <Pressable
-                key={session.id}
-                onPress={() => router.push(`/(chat)/${session.id}`)}
-                style={({ pressed }) => [
-                  styles.sessionCard,
-                  pressed && styles.sessionCardPressed
-                ]}
-              >
-                <View style={styles.sessionHeader}>
-                  <ThemedText style={styles.sessionTitle} numberOfLines={1}>
-                    {session.scenario?.title || 'Practice Session'}
-                  </ThemedText>
-                  <ThemedText style={styles.sessionLanguage}>
-                    {session.target_language.name}
-                  </ThemedText>
-                </View>
-                <View style={styles.sessionInfo}>
-                  <ThemedText style={styles.sessionDate}>
-                    {new Date(session.created_at).toLocaleDateString()}
-                  </ThemedText>
-                  <ThemedText style={styles.sessionMetrics}>
-                    {session.messages?.length || 0} messages • 
-                    {Math.round((session.metrics?.duration || 0) / 60000)}m
-                  </ThemedText>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : (
-        <ThemedView style={styles.emptyState}>
-          <ThemedText style={styles.emptyStateText}>
-            No conversations yet. Start practicing!
-          </ThemedText>
-        </ThemedView>
-      )}
-    </ThemedView>
-  );
-};
+    return (
+      <ThemedView style={styles.recentSection}>
+        <ThemedText style={styles.sectionTitle}>Recent Activity</ThemedText>
+        {recentSessions.length > 0 ? (
+          <View>
+            {recentSessions.map((session) => {
+              // Check if the session has the required data
+              if (!session?.target_language?.name) {
+                console.warn("Session missing target language:", session);
+                return null;
+              }
+
+              return (
+                <Pressable
+                  key={session.id}
+                  onPress={() => router.push(`/(chat)/${session.id}`)}
+                  style={({ pressed }) => [
+                    styles.sessionCard,
+                    pressed && styles.sessionCardPressed,
+                  ]}
+                >
+                  <View style={styles.sessionHeader}>
+                    <ThemedText style={styles.sessionTitle} numberOfLines={1}>
+                      {session.scenario?.title || "Practice Session"}
+                    </ThemedText>
+                    <ThemedText style={styles.sessionLanguage}>
+                      {session.target_language.name}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.sessionInfo}>
+                    <ThemedText style={styles.sessionDate}>
+                      {new Date(session.startTime).toLocaleDateString()}
+                    </ThemedText>
+                    <ThemedText style={styles.sessionMetrics}>
+                      {session.messages?.length || 0} messages •
+                      {Math.round((session.metrics?.duration || 0) / 60000)}m
+                    </ThemedText>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : (
+          <ThemedView style={styles.emptyState}>
+            <ThemedText style={styles.emptyStateText}>
+              No conversations yet. Start practicing!
+            </ThemedText>
+          </ThemedView>
+        )}
+      </ThemedView>
+    );
+  };
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView 
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <ScrollView
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
@@ -175,7 +179,7 @@ const renderRecentSection = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   contentContainer: {
     flexGrow: 1,

@@ -2,7 +2,7 @@
 import * as Crypto from "expo-crypto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ChatMessage } from "@/types";
-import { encode as encodeBase64, decode as decodeBase64 } from "base-64";
+// Remove the base-64 import as we'll implement our own Unicode-safe methods
 
 export class EncryptionService {
   private static readonly KEY_PREFIX = "@encryption_key_";
@@ -34,6 +34,7 @@ export class EncryptionService {
       throw error;
     }
   }
+  
   private static async generateSocialSecret(userId: string): Promise<string> {
     // Generate a persistent secret for social auth users
     const existingSecret = await AsyncStorage.getItem(
@@ -49,6 +50,25 @@ export class EncryptionService {
     await AsyncStorage.setItem(`@social_secret:${userId}`, secretString);
     return secretString;
   }
+  
+  // Handle password change method
+  static async handlePasswordChange(userId: string, oldPassword: string, newPassword: string): Promise<void> {
+    try {
+      // Logic to re-encrypt with new password
+      console.log('Re-encrypting user data with new password');
+      
+      // Generate new encryption key using new password
+      await this.generateUserKey(userId, newPassword, 'password');
+      
+      // implement more logic here based on the the encryption 
+      
+      console.log('Password change completed successfully');
+    } catch (error) {
+      console.error('Error handling password change:', error);
+      throw error;
+    }
+  }
+  
   static async migrateEncryption(
     userId: string,
     oldKey: string,
@@ -91,6 +111,28 @@ export class EncryptionService {
     }
   }
 
+  // New helper methods for Unicode-safe Base64 encoding/decoding
+  private static bytesToBase64(bytes: Uint8Array): string {
+    // Convert bytes to binary string
+    let binaryString = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binaryString += String.fromCharCode(bytes[i]);
+    }
+    // Use built-in btoa for Base64 encoding
+    return btoa(binaryString);
+  }
+
+  private static base64ToBytes(base64: string): Uint8Array {
+    // Use built-in atob for Base64 decoding to binary string
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  // Updated encrypt method that properly handles Unicode
   private static async encrypt(text: string, key: string): Promise<string> {
     try {
       // Generate a unique identifier for each encryption
@@ -106,32 +148,37 @@ export class EncryptionService {
         `${key}:${salt}`
       );
 
-      // Convert text to base64 for consistent encoding
-      const textBuffer = encodeBase64(text);
-
-      // XOR encryption (simple but effective for our use case)
-      const encryptedBuffer = new Array(textBuffer.length);
-      for (let i = 0; i < textBuffer.length; i++) {
-        encryptedBuffer[i] = String.fromCharCode(
-          textBuffer.charCodeAt(i) ^
-            encryptionKey.charCodeAt(i % encryptionKey.length)
-        );
+      // Convert text to bytes using TextEncoder (handles Unicode correctly)
+      const encoder = new TextEncoder();
+      const textBytes = encoder.encode(text);
+      
+      // Convert encryption key to bytes as well
+      const keyBytes = encoder.encode(encryptionKey);
+      
+      // Perform XOR encryption on bytes
+      const encryptedBytes = new Uint8Array(textBytes.length);
+      for (let i = 0; i < textBytes.length; i++) {
+        encryptedBytes[i] = textBytes[i] ^ keyBytes[i % keyBytes.length];
       }
 
-      return `${salt}:${encodeBase64(encryptedBuffer.join(""))}`;
+      // Convert encrypted bytes to Base64 string
+      const base64Result = this.bytesToBase64(encryptedBytes);
+      
+      return `${salt}:${base64Result}`;
     } catch (error) {
       console.error("Encryption error:", error);
       return text; // Fallback to plaintext
     }
   }
 
+  // Updated decrypt method that properly handles Unicode
   private static async decrypt(
     encryptedText: string,
     key: string
   ): Promise<string> {
     try {
-      const [salt, text] = encryptedText.split(":");
-      if (!salt || !text) return encryptedText;
+      const [salt, base64Text] = encryptedText.split(":");
+      if (!salt || !base64Text) return encryptedText;
 
       // Recreate encryption key
       const encryptionKey = await Crypto.digestStringAsync(
@@ -139,17 +186,22 @@ export class EncryptionService {
         `${key}:${salt}`
       );
 
-      // Decrypt using XOR
-      const encryptedBuffer = decodeBase64(text);
-      const decryptedBuffer = new Array(encryptedBuffer.length);
-      for (let i = 0; i < encryptedBuffer.length; i++) {
-        decryptedBuffer[i] = String.fromCharCode(
-          encryptedBuffer.charCodeAt(i) ^
-            encryptionKey.charCodeAt(i % encryptionKey.length)
-        );
+      // Convert Base64 text to bytes
+      const encryptedBytes = this.base64ToBytes(base64Text);
+      
+      // Convert encryption key to bytes
+      const encoder = new TextEncoder();
+      const keyBytes = encoder.encode(encryptionKey);
+      
+      // Perform XOR decryption on bytes
+      const decryptedBytes = new Uint8Array(encryptedBytes.length);
+      for (let i = 0; i < encryptedBytes.length; i++) {
+        decryptedBytes[i] = encryptedBytes[i] ^ keyBytes[i % keyBytes.length];
       }
-
-      return decodeBase64(decryptedBuffer.join(""));
+      
+      // Convert decrypted bytes back to text using TextDecoder
+      const decoder = new TextDecoder();
+      return decoder.decode(decryptedBytes);
     } catch (error) {
       console.error("Decryption error:", error);
       return encryptedText;

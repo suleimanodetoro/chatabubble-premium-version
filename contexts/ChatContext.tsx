@@ -123,8 +123,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     user,
     currentSession, 
     currentScenario,
-    sourceLanguage,
-    targetLanguage,
+    source_language,
+    target_language,
     setCurrentSession,
   } = useAppStore();
 
@@ -195,8 +195,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         id: state.sessionId,
         userId: user?.id || 'guest',
         scenarioId: currentScenario.id,
-        sourceLanguage: sourceLanguage || { code: 'en', name: 'English', direction: 'ltr' },
-        targetLanguage: targetLanguage || currentScenario.targetLanguage,
+        source_language: source_language || { code: 'en', name: 'English', direction: 'ltr' },
+        target_language: target_language || currentScenario.target_language,
         messages: state.messages,
         startTime: currentSession?.startTime || Date.now(),
         lastUpdated: Date.now(),
@@ -221,13 +221,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         
         // Check if level up is needed
         const stats = await MetricsService.getUserMetrics(user.id);
-        const currentProgress = stats.languageProgress[session.targetLanguage.code];
+        const currentProgress = stats.languageProgress[session.target_language.code];
         
         if (currentProgress?.sessionsCompleted % 5 === 0) {
           await ProfileService.updateProfile(user.id, {
             current_levels: {
               ...user.current_levels,
-              [session.targetLanguage.code]: currentProgress.sessionsCompleted > 20 ? 'advanced' :
+              [session.target_language.code]: currentProgress.sessionsCompleted > 20 ? 'advanced' :
                                           currentProgress.sessionsCompleted > 10 ? 'intermediate' : 
                                           'beginner'
             }
@@ -253,8 +253,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         id: state.sessionId,
         userId: user?.id || 'guest',
         scenarioId: currentScenario.id,
-        sourceLanguage: sourceLanguage || { code: 'en', name: 'English', direction: 'ltr' },
-        targetLanguage: targetLanguage || currentScenario.targetLanguage,
+        source_language: source_language || { code: 'en', name: 'English', direction: 'ltr' },
+        target_language: target_language || currentScenario.target_language,
         messages: state.messages,
         startTime: currentSession?.startTime || Date.now(),
         lastUpdated: Date.now(),
@@ -285,8 +285,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           id: state.sessionId,
           userId: user?.id || 'guest',
           scenarioId: currentScenario.id,
-          sourceLanguage: sourceLanguage || { code: 'en', name: 'English', direction: 'ltr' },
-          targetLanguage: targetLanguage || currentScenario.targetLanguage,
+          source_language: source_language || { code: 'en', name: 'English', direction: 'ltr' },
+          target_language: target_language || currentScenario.target_language,
           messages: state.messages,
           startTime: currentSession?.startTime || Date.now(),
           lastUpdated: Date.now(),

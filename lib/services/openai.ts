@@ -23,7 +23,7 @@ export class OpenAIService {
   static async generateChatCompletion(
     messages: ChatMessage[],
     scenario: Scenario,
-    targetLanguage: string
+    target_language: string
   ) {
     try {
       const formattedMessages = [
@@ -33,7 +33,7 @@ export class OpenAIService {
                    Personality: ${scenario.persona.personality}
                    Context: ${scenario.description}
                    IMPORTANT: 
-                   - Always respond ONLY in ${targetLanguage}
+                   - Always respond ONLY in ${target_language}
                    - Maintain consistency with your previous statements
                    - Remember and acknowledge previous context
                    - If you previously mentioned leaving or any other state, maintain that context
@@ -45,7 +45,7 @@ export class OpenAIService {
           role: 'system',
           content: `Current conversation summary:
                    - User messages are in English
-                   - Your responses must be only in ${targetLanguage}
+                   - Your responses must be only in ${target_language}
                    - Never include translations or English text
                    - Maintain conversation context and consistency`
         },
@@ -80,14 +80,14 @@ export class OpenAIService {
     }
   }
 
-  static async translateText(text: string, targetLanguage: string): Promise<string> {
+  static async translateText(text: string, target_language: string): Promise<string> {
     try {
       const response = await api.post('', {
         model: Config.MODEL,
         messages: [
           {
             role: 'system',
-            content: `You are a translator. Translate the following text to ${targetLanguage}. 
+            content: `You are a translator. Translate the following text to ${target_language}. 
                      Respond with ONLY the translation, no explanations or brackets.`
           },
           { role: 'user', content: text }

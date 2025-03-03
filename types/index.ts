@@ -47,7 +47,7 @@ export interface Scenario {
     personality: string;
     languageStyle: "formal" | "casual" | "mixed";
   };
-  targetLanguage: Language;
+  target_language: Language;
 }
 
 export interface Session {
@@ -55,7 +55,7 @@ export interface Session {
     userId: string;
     scenarioId: string;
     target_language: Language;  
-    sourceLanguage: Language;
+    source_language: Language;
     messages: ChatMessage[];
     startTime: number;
     lastUpdated: number;

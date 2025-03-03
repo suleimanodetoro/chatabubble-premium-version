@@ -7,10 +7,11 @@ import { ThemedView } from "../../components/ThemedView";
 import { ThemedText } from "../../components/ThemedText";
 import { Collapsible } from "../../components/Collapsible";
 import { useAppStore } from "../../hooks/useAppStore";
-import { Scenario, Session } from "../../types";
+import { Scenario, Session, ChatMessage } from '@/types';
 import { generateId } from "@/lib/utils/ids";
 import { StorageService } from "@/lib/services/storage";
 import { SubscriptionService } from "@/lib/services/subscription";
+
 import SubscriptionLimitModal from "@/components/ui/SubscriptionLimitModal";
 
 // Maximum number of free sessions allowed
@@ -28,7 +29,7 @@ export default function ScenariosScreen() {
     setCurrentScenario,
     setCurrentSession,
     saveSession,
-    sourceLanguage,
+    source_language,
     loadScenarios,
     user,
     isPremium
@@ -79,8 +80,8 @@ export default function ScenariosScreen() {
       return;
     }
     
-    if (!sourceLanguage || !scenario.targetLanguage) {
-      console.log('Missing languages:', { sourceLanguage, targetLanguage: scenario.targetLanguage });
+    if (!source_language || !scenario.target_language) {
+      console.log('Missing languages:', { source_language, target_language: scenario.target_language });
       Alert.alert(
         "Language Selection Required",
         "This scenario doesn't have a target language set"
@@ -123,8 +124,8 @@ export default function ScenariosScreen() {
           id: sessionId,
           userId: user?.id || 'guest',
           scenarioId: scenario.id,
-          targetLanguage: scenario.targetLanguage,
-          sourceLanguage,
+          target_language: scenario.target_language,
+          source_language,
           messages: [],
           startTime: Date.now(),
           lastUpdated: Date.now(),
@@ -205,9 +206,9 @@ export default function ScenariosScreen() {
               Level: {scenario.difficulty}
             </ThemedText>
 
-            {scenario.targetLanguage && (
+            {scenario.target_language && (
               <ThemedText style={styles.detailText}>
-                Language: {scenario.targetLanguage.name}
+                Language: {scenario.target_language.name}
               </ThemedText>
             )}
           </ThemedView>

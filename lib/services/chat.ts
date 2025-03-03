@@ -23,10 +23,10 @@ static async createOrUpdateSession(session: Session, messages: ChatMessage[]) {
         messageCount: messages.length
       });
   
-      if (!session.target_language && session.scenario?.targetLanguage) {
+      if (!session.target_language && session.scenario?.target_language) {
         session = {
           ...session,
-          target_language: session.scenario.targetLanguage
+          target_language: session.scenario.target_language
         };
       }
   
@@ -55,7 +55,7 @@ static async createOrUpdateSession(session: Session, messages: ChatMessage[]) {
           user_id: session.userId,
           scenario_id: session.scenarioId,
           messages: processedMessages,
-          source_language: session.sourceLanguage,
+          source_language: session.source_language,
           target_language: session.target_language,
           status: session.status,
           metrics,
