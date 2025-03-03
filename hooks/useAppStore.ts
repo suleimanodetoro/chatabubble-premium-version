@@ -7,9 +7,6 @@ import { StorageService } from "@/lib/services/storage";
 import { ScenarioService } from "@/lib/services/scenario";
 import { supabase } from '@/lib/supabase/client';
 
-
-
-
 interface AppState {
   user: User | null;
   currentSession: Session | null;
@@ -18,8 +15,8 @@ interface AppState {
   sourceLanguage: Language | null;
   scenarios: Scenario[];
   activeSessions: Record<string, Session>;
+  isPremium: boolean; // Add this
   loadScenarios: () => Promise<void>;
-
 
   // Actions
   setUser: (user: User | null) => void;
@@ -30,6 +27,7 @@ interface AppState {
   addScenario: (scenario: Scenario) => void;
   saveSession: (session: Session) => Promise<void>;
   loadSession: (sessionId: string) => Promise<Session | null>;
+  setIsPremium: (status: boolean) => void; // Add this
 }
 
 const DEFAULT_SOURCE_LANGUAGE: Language = {
@@ -48,12 +46,14 @@ export const useAppStore = create<AppState>()(
       sourceLanguage: DEFAULT_SOURCE_LANGUAGE,
       scenarios: [],
       activeSessions: {},
+      isPremium: false, 
 
       setUser: (user) => set({ user }),
       setCurrentSession: (session) => set({ currentSession: session }),
       setCurrentScenario: (scenario) => set({ currentScenario: scenario }),
       setTargetLanguage: (language) => set({ targetLanguage: language }),
       setSourceLanguage: (language) => set({ sourceLanguage: language }),
+      setIsPremium: (status) => set({ isPremium: status }), 
       
 
       addScenario: (scenario) =>
@@ -164,6 +164,7 @@ loadScenarios: async () => {
         activeSessions: state.activeSessions,
         sourceLanguage: state.sourceLanguage,
         user: state.user,
+        isPremium: state.isPremium, 
       }),
     }
   )

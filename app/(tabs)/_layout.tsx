@@ -42,15 +42,6 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="subscription"
-        options={{
-          title: "Premium",
-          tabBarIcon: ({ color }) => (
-            <HapticTab iconName="star" color={color} />
-          ),
-        }}
-      />
     </Tabs>
   );
 }

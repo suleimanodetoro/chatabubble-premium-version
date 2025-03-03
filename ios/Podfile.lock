@@ -84,8 +84,8 @@ PODS:
   - hermes-engine (0.76.3):
     - hermes-engine/Pre-built (= 0.76.3)
   - hermes-engine/Pre-built (0.76.3)
-  - PurchasesHybridCommon (13.13.0):
-    - RevenueCat (= 5.14.0)
+  - PurchasesHybridCommon (13.21.0):
+    - RevenueCat (= 5.18.0)
   - RCT-Folly (2024.01.01.00):
     - boost
     - DoubleConversion
@@ -1615,7 +1615,7 @@ PODS:
     - React-logger (= 0.76.3)
     - React-perflogger (= 0.76.3)
     - React-utils (= 0.76.3)
-  - RevenueCat (5.14.0)
+  - RevenueCat (5.18.0)
   - RNCAsyncStorage (1.23.1):
     - React-Core
   - RNFlashList (1.7.1):
@@ -1663,8 +1663,8 @@ PODS:
   - RNGoogleSignin (13.1.0):
     - GoogleSignIn (~> 7.1)
     - React-Core
-  - RNPurchases (8.4.2):
-    - PurchasesHybridCommon (= 13.13.0)
+  - RNPurchases (8.7.0):
+    - PurchasesHybridCommon (= 13.21.0)
     - React-Core
   - RNReanimated (3.16.2):
     - DoubleConversion
@@ -2108,7 +2108,7 @@ SPEC CHECKSUMS:
   GTMAppAuth: f69bd07d68cd3b766125f7e072c45d7340dea0de
   GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
   hermes-engine: 0555a84ea495e8e3b4bde71b597cd87fbb382888
-  PurchasesHybridCommon: a712dcce0d81fa39dada521292408816146ca58c
+  PurchasesHybridCommon: 9691d74a051f30858360d78936d59dc14575014e
   RCT-Folly: bf5c0376ffe4dd2cf438dcf86db385df9fdce648
   RCTDeprecation: 2c5e1000b04ab70b53956aa498bf7442c3c6e497
   RCTRequired: 5f785a001cf68a551c5f5040fb4c415672dbb481
@@ -2169,12 +2169,12 @@ SPEC CHECKSUMS:
   React-utils: 2bcaf4f4dfe361344bce2fae428603d518488630
   ReactCodegen: ae99a130606068ed40d1d9c0d5f25fda142a0647
   ReactCommon: 89c87b343deacc8610b099ac764848f0ce937e3e
-  RevenueCat: 34f4147c8d26d2f3c691be4e3c9f033698e557f2
+  RevenueCat: e825836f5d6baa870c53d7281be25a5fd91abd91
   RNCAsyncStorage: 826b603ae9c0f88b5ac4e956801f755109fa4d5c
   RNFlashList: 115dd44377580761bff386a0caebf165424cf16f
   RNGestureHandler: 511250b190a284388f9dd0d2e56c1df76f14cfb8
   RNGoogleSignin: 9e68b9bcc3888219357924e32ee563624745647d
-  RNPurchases: 872d0a5cafa8dd4c6833f094b01d9b5a3c47ebc3
+  RNPurchases: 3b35539c86769ad8a8f838060559cf13d0a8fcb1
   RNReanimated: 5b6e322c4b257d0e755d8b45c02c1a2cf478d5a4
   RNScreens: e6f9bc3a41be76af2ba0a815ea299a0000b1c838
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
