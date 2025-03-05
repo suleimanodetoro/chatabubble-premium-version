@@ -122,11 +122,13 @@ export class AuthService {
     }
   }
 
+  // Enhanced setupUserAfterAuth method in auth.ts
+
   private static async setupUserAfterAuth(
     user: any,
     authType: "password" | "social"
-  ) {
-    console.log("Setting up user after auth:", user.id);
+  ): Promise<boolean> {
+    console.log("Setting up user after auth:", user.id, "auth type:", authType);
 
     try {
       // Create or get profile with retries
@@ -156,6 +158,11 @@ export class AuthService {
       const keyStatus = await AsyncStorage.getItem(`${KEY_STATUS}${user.id}`);
       if (!keyStatus) {
         console.log("Setting up encryption for user:", user.id);
+
+        // Store the auth type first
+        await AsyncStorage.setItem(`@auth_type_${user.id}`, authType);
+
+        // Generate encryption key with the correct auth type
         await EncryptionService.generateUserKey(user.id, user.email, authType);
         await AsyncStorage.setItem(`${KEY_STATUS}${user.id}`, "generated");
       }
@@ -168,6 +175,7 @@ export class AuthService {
             await supabase.auth.getSession()
           ).data.session?.access_token,
           user_id: user.id,
+          auth_type: authType, // Store auth type in token object too
         })
       );
 
