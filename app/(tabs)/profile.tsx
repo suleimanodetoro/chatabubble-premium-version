@@ -1,4 +1,4 @@
-// app/(tabs)/profile.tsx
+// app/(tabs)/profile.tsx - Updated with enhanced account deletion
 import {
     StyleSheet,
     Alert,
@@ -7,6 +7,7 @@ import {
     TextInput,
     Modal,
     View,
+    ActivityIndicator,
   } from "react-native";
   import { useRouter } from "expo-router";
   import { useState, useEffect } from "react";
@@ -18,6 +19,7 @@ import {
   import { supabase } from "@/lib/supabase/client";
   import { EncryptionService } from "@/lib/services/encryption";
   import { SubscriptionService } from "@/lib/services/subscription";
+  import { AuthService } from "@/lib/services/auth";
   import SubscriptionPanel from "@/components/ui/SubscriptionPanel";
   
   export default function ProfileScreen() {
@@ -26,10 +28,13 @@ import {
       useAppStore();
   
     const [isLoading, setIsLoading] = useState(true);
+    const [isDeletingAccount, setIsDeletingAccount] = useState(false);
     const [metrics, setMetrics] = useState<any>(null);
     const [isEmailModalVisible, setIsEmailModalVisible] = useState(false);
     const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
     const [isSubscriptionModalVisible, setIsSubscriptionModalVisible] = useState(false);
+    const [isConfirmDeleteModalVisible, setIsConfirmDeleteModalVisible] = useState(false);
+    const [deleteConfirmation, setDeleteConfirmation] = useState("");
     const [newEmail, setNewEmail] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
@@ -104,7 +109,6 @@ import {
       }
     };
   
-    // app/(tabs)/profile.tsx
     const handleUpdatePassword = async () => {
       if (!newPassword.trim() || !confirmPassword.trim()) {
         Alert.alert("Error", "Please fill in all fields");
@@ -149,33 +153,63 @@ import {
       }
     };
   
+    // Enhanced account deletion function
     const handleDeleteAccount = () => {
-      Alert.alert(
-        "Delete Account",
-        "Are you sure you want to delete your account? This action cannot be undone.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                const { error } = await supabase.auth.admin.deleteUser(
-                  user?.id as string
-                );
-                if (error) throw error;
+      setIsConfirmDeleteModalVisible(true);
+    };
   
-                setUser(null);
-                setCurrentSession(null);
-                setCurrentScenario(null);
-                router.replace("/(auth)/login");
-              } catch (error) {
-                Alert.alert("Error", "Failed to delete account");
-              }
+    // Process account deletion after confirmation
+    const processAccountDeletion = async () => {
+      if (deleteConfirmation !== "DELETE") {
+        Alert.alert("Error", "Please type DELETE to confirm account deletion");
+        return;
+      }
+  
+      if (!user?.id || !user?.email) {
+        Alert.alert("Error", "User information is missing");
+        return;
+      }
+  
+      try {
+        setIsDeletingAccount(true);
+        setIsConfirmDeleteModalVisible(false);
+  
+        // Call enhanced AuthService delete account method
+        const { success, error } = await AuthService.deleteAccount(
+          user.id,
+          user.email
+        );
+  
+        if (!success) {
+          throw new Error(error || "Failed to delete account");
+        }
+  
+        // Reset app state
+        setUser(null);
+        setCurrentSession(null);
+        setCurrentScenario(null);
+  
+        // Show success message and redirect to login
+        Alert.alert(
+          "Account Deleted",
+          "Your account and all associated data have been deleted successfully.",
+          [
+            {
+              text: "OK",
+              onPress: () => router.replace("/(auth)/login"),
             },
-          },
-        ]
-      );
+          ]
+        );
+      } catch (error) {
+        console.error("Account deletion error:", error);
+        Alert.alert(
+          "Error Deleting Account",
+          (error as Error).message || "Please try again or contact support."
+        );
+      } finally {
+        setIsDeletingAccount(false);
+        setDeleteConfirmation("");
+      }
     };
   
     const renderStats = () => (
@@ -279,8 +313,11 @@ import {
               <Pressable
                 style={styles.deleteButton}
                 onPress={handleDeleteAccount}
+                disabled={isDeletingAccount}
               >
-                <ThemedText style={styles.deleteText}>Delete Account</ThemedText>
+                <ThemedText style={styles.deleteText}>
+                  {isDeletingAccount ? "Deleting Account..." : "Delete Account"}
+                </ThemedText>
               </Pressable>
             </ThemedView>
           </ScrollView>
@@ -382,6 +419,83 @@ import {
                 />
               </ScrollView>
             </SafeAreaView>
+          </Modal>
+  
+          {/* Account Deletion Confirmation Modal */}
+          <Modal
+            visible={isConfirmDeleteModalVisible}
+            animationType="slide"
+            transparent={true}
+            onRequestClose={() => setIsConfirmDeleteModalVisible(false)}
+          >
+            <View style={styles.modalContainer}>
+              <ThemedView style={[styles.modalContent, styles.deleteModalContent]}>
+                <ThemedText style={styles.deleteModalTitle}>Delete Account</ThemedText>
+                
+                <ThemedText style={styles.deleteModalDescription}>
+                  This action cannot be undone. All your data will be permanently removed, including:
+                </ThemedText>
+  
+                <View style={styles.deletionItemsList}>
+                  <ThemedText style={styles.deletionItem}>• All conversation history</ThemedText>
+                  <ThemedText style={styles.deletionItem}>• Your profile information</ThemedText>
+                  <ThemedText style={styles.deletionItem}>• Custom scenarios you've created</ThemedText>
+                  <ThemedText style={styles.deletionItem}>• Learning progress and statistics</ThemedText>
+                  {isSubscribed && (
+                    <ThemedText style={styles.deletionItem}>• Active subscriptions (must be canceled separately)</ThemedText>
+                  )}
+                </View>
+  
+                {isSubscribed && (
+                  <ThemedText style={styles.subscriptionWarning}>
+                    Note: Deleting your account will not automatically cancel your subscription. 
+                    Please cancel your subscription through the App Store or Google Play before 
+                    deleting your account.
+                  </ThemedText>
+                )}
+                
+                <ThemedText style={styles.confirmInstructions}>
+                  Type DELETE to confirm:
+                </ThemedText>
+                
+                <TextInput
+                  style={styles.confirmInput}
+                  value={deleteConfirmation}
+                  onChangeText={setDeleteConfirmation}
+                  placeholder="Type DELETE here"
+                  autoCapitalize="characters"
+                />
+                
+                <View style={styles.deleteModalButtons}>
+                  <Pressable
+                    style={styles.cancelDeleteButton}
+                    onPress={() => {
+                      setIsConfirmDeleteModalVisible(false);
+                      setDeleteConfirmation("");
+                    }}
+                  >
+                    <ThemedText style={styles.cancelDeleteText}>Cancel</ThemedText>
+                  </Pressable>
+                  
+                  <Pressable
+                    style={[
+                      styles.confirmDeleteButton,
+                      (deleteConfirmation !== "DELETE" || isDeletingAccount) && styles.disabledButton
+                    ]}
+                    onPress={processAccountDeletion}
+                    disabled={deleteConfirmation !== "DELETE" || isDeletingAccount}
+                  >
+                    {isDeletingAccount ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <ThemedText style={styles.confirmDeleteText}>
+                        Delete My Account
+                      </ThemedText>
+                    )}
+                  </Pressable>
+                </View>
+              </ThemedView>
+            </View>
           </Modal>
         </ThemedView>
       </SafeAreaView>
@@ -518,11 +632,92 @@ import {
       borderRadius: 12,
       padding: 20,
     },
+    deleteModalContent: {
+      width: "90%",
+      maxHeight: "80%",
+    },
     modalTitle: {
       fontSize: 18,
       fontWeight: "600",
       marginBottom: 20,
       textAlign: "center",
+    },
+    deleteModalTitle: {
+      fontSize: 20,
+      fontWeight: "700",
+      marginBottom: 15,
+      textAlign: "center",
+      color: "#ff3b30",
+    },
+    deleteModalDescription: {
+      fontSize: 16,
+      lineHeight: 22,
+      marginBottom: 15,
+      textAlign: "center",
+    },
+    deletionItemsList: {
+      marginBottom: 20,
+      paddingHorizontal: 10,
+    },
+    deletionItem: {
+      fontSize: 14,
+      marginBottom: 8,
+      lineHeight: 20,
+    },
+    subscriptionWarning: {
+      fontSize: 14,
+      color: "#ff3b30",
+      marginBottom: 20,
+      fontWeight: "500",
+      textAlign: "center",
+    },
+    confirmInstructions: {
+      fontSize: 16,
+      fontWeight: "600",
+      marginBottom: 10,
+      textAlign: "center",
+    },
+    confirmInput: {
+      height: 48,
+      borderWidth: 1,
+      borderColor: "#ccc",
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      marginBottom: 20,
+      fontSize: 16,
+      textAlign: "center",
+    },
+    deleteModalButtons: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    cancelDeleteButton: {
+      flex: 1,
+      padding: 15,
+      alignItems: "center",
+      marginRight: 10,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: "#ccc",
+    },
+    cancelDeleteText: {
+      fontSize: 16,
+      color: "#666",
+    },
+    confirmDeleteButton: {
+      flex: 1,
+      padding: 15,
+      backgroundColor: "#ff3b30",
+      alignItems: "center",
+      borderRadius: 8,
+    },
+    confirmDeleteText: {
+      fontSize: 16,
+      color: "#fff",
+      fontWeight: "600",
+    },
+    disabledButton: {
+      opacity: 0.5,
     },
     input: {
       height: 48,

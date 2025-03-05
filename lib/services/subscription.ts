@@ -1,4 +1,4 @@
-// lib/services/subscription.ts
+// lib/services/subscription.ts - Fixed TypeScript issues & account deletion support
 import Purchases, { PurchasesPackage, CustomerInfo } from 'react-native-purchases';
 import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase/client';
@@ -65,12 +65,87 @@ export class SubscriptionService {
     }
   }
   
+  /**
+   * Handles cancellation or cleanup of user subscriptions during account deletion
+   * Note: This doesn't actually cancel App Store/Play Store subscriptions,
+   * it just disassociates them from the user account in our system
+   */
+  static async cancelSubscription(userId: string): Promise<boolean> {
+    try {
+      console.log('Cleaning up subscription data for user:', userId);
+      
+      // 1. First try to clean up any RevenueCat associations
+      try {
+        // Check if user is identified with RevenueCat
+        const userInfo = await AsyncStorage.getItem(`@revenuecat_user:${userId}`);
+        
+        if (userInfo) {
+          console.log('Found RevenueCat user info, attempting to clean up');
+          
+          // Set anonymous ID for RevenueCat (this disassociates rather than deletes)
+          await Purchases.logOut();
+          
+          // Clear local RevenueCat cache
+          await AsyncStorage.removeItem(`@revenuecat_user:${userId}`);
+          await AsyncStorage.removeItem(SUBSCRIPTION_CACHE_KEY);
+        }
+      } catch (revenueCatError) {
+        console.error('Error cleaning up RevenueCat data:', revenueCatError);
+        // Continue with other cleanup even if RevenueCat fails
+      }
+      
+      // 2. Update Supabase subscription record
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ 
+            subscription: {
+              active: false,
+              tier: null,
+              cancelled_at: new Date().toISOString(),
+              expiration: null,
+              product_id: null
+            } 
+          })
+          .eq('id', userId);
+          
+        if (error) {
+          console.error('Error updating subscription in database:', error);
+          return false;
+        }
+      } catch (dbError) {
+        console.error('Error updating subscription in database:', dbError);
+        return false;
+      }
+      
+      // 3. Clear any local subscription cache
+      await AsyncStorage.removeItem(SUBSCRIPTION_CACHE_KEY);
+      
+      console.log('Subscription data cleanup completed successfully');
+      return true;
+    } catch (error) {
+      console.error('Error in cancelSubscription:', error);
+      return false;
+    }
+  }
+  
   static async identifyUser(userId: string): Promise<boolean> {
     try {
-      const { customerInfo } = await Purchases.logIn(userId);
-      const isSubscribed = this.checkSubscriptionStatus(customerInfo);
-      console.log('User identified with RevenueCat, subscription status:', isSubscribed);
-      return isSubscribed;
+      // According to RevenueCat docs, logIn returns an object containing customerInfo
+      const response = await Purchases.logIn(userId);
+      
+      // Check if user has active entitlements for our premium access
+      const hasActiveEntitlement = response?.customerInfo?.entitlements?.active?.[ENTITLEMENT_ID]?.isActive ?? false;
+      
+      console.log('User identified with RevenueCat, subscription status:', hasActiveEntitlement);
+      
+      // Store RevenueCat user association
+      await AsyncStorage.setItem(`@revenuecat_user:${userId}`, JSON.stringify({
+        identified: true,
+        timestamp: Date.now()
+      }));
+      
+      return hasActiveEntitlement;
     } catch (error) {
       console.error('Error identifying user with RevenueCat:', error);
       return false;
@@ -85,7 +160,8 @@ export class SubscriptionService {
         // Try to get packages from RevenueCat first
         const offerings = await Purchases.getOfferings();
         
-        if (offerings.current?.availablePackages?.length > 0) {
+        // Fixed: proper null checking
+        if (offerings.current && offerings.current.availablePackages && offerings.current.availablePackages.length > 0) {
           console.log('Found RevenueCat offerings:', offerings.current.identifier);
           
           return offerings.current.availablePackages.map(pkg => ({
@@ -117,7 +193,9 @@ export class SubscriptionService {
       
       // Try to get the offerings from RevenueCat
       const offerings = await Purchases.getOfferings();
-      const packageToPurchase = offerings.current?.availablePackages.find(
+      
+      // Fixed: proper null checking
+      const packageToPurchase = offerings.current?.availablePackages?.find(
         pkg => pkg.identifier === packageId
       );
 
@@ -141,17 +219,74 @@ export class SubscriptionService {
         throw new Error('Subscription package not found');
       }
 
-      // Make the purchase through RevenueCat
-      const { customerInfo } = await Purchases.purchasePackage(packageToPurchase);
-      const isSubscribed = this.checkSubscriptionStatus(customerInfo);
-      
-      if (isSubscribed) {
-        console.log('Purchase successful, updating subscription status');
-        // Update the subscription status in our backend
-        await this.updateUserSubscriptionStatus(true, await this.getSubscriptionDetails());
+      try {
+        // Make the purchase through RevenueCat and handle timeout/hanging issue
+        // Using a Promise.race to prevent hanging forever on iOS as reported in community thread
+        const purchaseResult = await Promise.race([
+          Purchases.purchasePackage(packageToPurchase),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Purchase timed out')), 30000)
+          )
+        ]);
+        
+        // Check entitlements directly from the purchase result
+        // The response has a structure { customerInfo: CustomerInfo }
+        const isSubscribed = purchaseResult?.customerInfo?.entitlements?.active?.[ENTITLEMENT_ID]?.isActive ?? false;
+        
+        if (isSubscribed) {
+          console.log('Purchase successful, updating subscription status');
+          // Update the subscription status in our backend
+          await this.updateUserSubscriptionStatus(true, {
+            isActive: true,
+            productIdentifier: packageToPurchase.product.identifier,
+            purchaseDate: new Date().toISOString(),
+            expirationDate: null,
+            willRenew: true, 
+            isLifetime: false
+          });
+        }
+        
+        return isSubscribed;
+      } catch (purchaseError: any) {
+        console.error('Error during purchase:', purchaseError);
+        
+        // Handle the problem identified in the PDF - where purchase succeeds but call hangs
+        if (purchaseError.message === 'Purchase timed out') {
+          console.log('Purchase may have completed but timed out - checking status');
+          
+          // Verify if purchase went through by checking current entitlements
+          try {
+            // Wait a moment for purchase to register
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Check customer info directly
+            const customerInfo = await Purchases.getCustomerInfo();
+            const isActive = customerInfo?.entitlements?.active?.[ENTITLEMENT_ID]?.isActive ?? false;
+            
+            if (isActive) {
+              console.log('Purchase was successful despite timeout');
+              await this.updateUserSubscriptionStatus(true, {
+                isActive: true,
+                productIdentifier: packageToPurchase.product.identifier,
+                purchaseDate: new Date().toISOString(),
+                expirationDate: null,
+                willRenew: true,
+                isLifetime: false
+              });
+              return true;
+            }
+          } catch (verifyError) {
+            console.error('Error verifying purchase after timeout:', verifyError);
+          }
+        }
+        
+        // Check if user canceled the purchase (don't throw in this case)
+        if (purchaseError.userCancelled) {
+          return false;
+        }
+        
+        throw purchaseError;
       }
-      
-      return isSubscribed;
     } catch (error: any) {
       console.error('Error purchasing package:', error);
       
@@ -167,13 +302,28 @@ export class SubscriptionService {
   static async restorePurchases(): Promise<boolean> {
     try {
       console.log('Restoring purchases...');
-      const { customerInfo } = await Purchases.restorePurchases();
-      const isSubscribed = this.checkSubscriptionStatus(customerInfo);
+      // Get the customer info directly from restorePurchases
+      const customerInfo = await Purchases.restorePurchases();
+      
+      // Access entitlement safely with optional chaining
+      // In this case, the response IS the CustomerInfo object, not containing it
+      const isSubscribed = customerInfo?.entitlements?.active?.[ENTITLEMENT_ID]?.isActive ?? false;
       
       if (isSubscribed) {
         console.log('Purchases restored successfully');
         // Update the subscription status in our backend
-        await this.updateUserSubscriptionStatus(true, await this.getSubscriptionDetails());
+        const entitlement = customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
+        
+        if (entitlement) {
+          await this.updateUserSubscriptionStatus(true, {
+            isActive: true,
+            productIdentifier: entitlement.productIdentifier,
+            purchaseDate: entitlement.latestPurchaseDate || null,
+            expirationDate: entitlement.expirationDate || null,
+            willRenew: entitlement.willRenew,
+            isLifetime: entitlement.periodType === "LIFETIME"
+          });
+        }
       } else {
         console.log('No active subscriptions found during restore');
       }
@@ -190,21 +340,34 @@ export class SubscriptionService {
       console.log('Checking subscription status...');
       
       // Try to use cache for faster response
-      const cachedStatus = await AsyncStorage.getItem(SUBSCRIPTION_CACHE_KEY);
-      if (cachedStatus) {
-        const { timestamp, status } = JSON.parse(cachedStatus);
-        const cacheAge = Date.now() - timestamp;
-        
-        // Use cache if it's less than 5 minutes old
-        if (cacheAge < 300000) {
-          console.log('Using cached subscription status:', status);
-          return status;
+      const cachedStatusStr = await AsyncStorage.getItem(SUBSCRIPTION_CACHE_KEY);
+      if (cachedStatusStr) {
+        try {
+          const cachedStatus = JSON.parse(cachedStatusStr);
+          const cacheAge = Date.now() - cachedStatus.timestamp;
+          
+          // Use cache if it's less than 5 minutes old
+          if (cacheAge < 300000) {
+            console.log('Using cached subscription status:', cachedStatus.status);
+            return cachedStatus.status;
+          }
+        } catch (parseError) {
+          console.error('Error parsing cached status:', parseError);
         }
       }
       
       // If no valid cache, check with RevenueCat
-      const info = customerInfo || (await Purchases.getCustomerInfo());
-      const isActive = info.entitlements.active[ENTITLEMENT_ID]?.isActive ?? false;
+      let info: CustomerInfo;
+      
+      if (customerInfo) {
+        info = customerInfo;
+      } else {
+        // getCustomerInfo returns the CustomerInfo object directly
+        info = await Purchases.getCustomerInfo();
+      }
+      
+      // Fixed: Safe property access with optional chaining
+      const isActive = info?.entitlements?.active?.[ENTITLEMENT_ID]?.isActive ?? false;
       
       console.log('Subscription status from RevenueCat:', isActive);
       
@@ -220,11 +383,11 @@ export class SubscriptionService {
       
       // If there's an error, try to use cached value if available
       try {
-        const cachedStatus = await AsyncStorage.getItem(SUBSCRIPTION_CACHE_KEY);
-        if (cachedStatus) {
-          const { status } = JSON.parse(cachedStatus);
-          console.log('Using cached status due to error:', status);
-          return status;
+        const cachedStatusStr = await AsyncStorage.getItem(SUBSCRIPTION_CACHE_KEY);
+        if (cachedStatusStr) {
+          const cachedStatus = JSON.parse(cachedStatusStr);
+          console.log('Using cached status due to error:', cachedStatus.status);
+          return cachedStatus.status;
         }
       } catch (cacheError) {
         console.error('Error reading cached status:', cacheError);
@@ -254,10 +417,12 @@ export class SubscriptionService {
       
       console.log('Found active entitlement:', entitlement.identifier);
       
+      // Fixed: Access entitlement properties correctly
       return {
         isActive: entitlement.isActive,
-        expirationDate: entitlement.expirationDate,
-        purchaseDate: entitlement.purchaseDate,
+        expirationDate: entitlement.expirationDate || null,
+        // Fixed: Use proper property names based on SDK
+        purchaseDate: entitlement.latestPurchaseDate || null,
         productIdentifier: entitlement.productIdentifier,
         isLifetime: entitlement.periodType === "LIFETIME",
         willRenew: entitlement.willRenew

@@ -1,4 +1,4 @@
-// @/lib/services/chat.ts
+// @/lib/services/chat.ts 
 
 import { supabase } from '../supabase/client';
 import { Session, ChatMessage } from '@/types';
@@ -9,13 +9,13 @@ interface SessionMetrics {
   messageCount: number;
   userMessageCount: number;
   assistantMessageCount: number;
-  duration: number; // in seconds
+  duration: number;
   startTime: string;
   lastMessageTime: string;
 }
 
 export class ChatService {
-static async createOrUpdateSession(session: Session, messages: ChatMessage[]) {
+  static async createOrUpdateSession(session: Session, messages: ChatMessage[]) {
     try {
       console.log('Starting session save:', {
         sessionId: session.id,
@@ -101,7 +101,72 @@ static async createOrUpdateSession(session: Session, messages: ChatMessage[]) {
       console.error('ChatService - Error completing session:', error);
       throw error;
     }
-}
+  }
+
+  /**
+   * Anonymizes a session by removing personally identifiable information
+   * This is used during account deletion when full deletion isn't possible
+   */
+  static async anonymizeSession(sessionId: string): Promise<boolean> {
+    try {
+      console.log('Anonymizing session:', sessionId);
+      
+      // First, get the session to check if we need to modify messages
+      const { data: session, error: fetchError } = await supabase
+        .from('chat_sessions')
+        .select('*')
+        .eq('id', sessionId)
+        .single();
+        
+      if (fetchError) {
+        console.error('Error fetching session for anonymization:', fetchError);
+        return false;
+      }
+      
+      // Create anonymized messages if any exist
+      let anonymizedMessages: any[] = [];
+      if (session.messages && Array.isArray(session.messages) && session.messages.length > 0) {
+        // For each message, remove any potential PII but keep the structure
+        anonymizedMessages = session.messages.map((msg: any, index: number) => ({
+          id: `anon_${index}`,
+          content: {
+            original: index % 2 === 0 ? "[User message removed]" : "[Assistant response removed]",
+            translated: index % 2 === 0 ? "[User message removed]" : "[Assistant response removed]",
+          },
+          sender: index % 2 === 0 ? "user" : "assistant",
+          timestamp: msg.timestamp || new Date().toISOString(),
+          isEdited: false
+        }));
+      }
+      
+      // Update the session with anonymized data
+      const { error: updateError } = await supabase
+        .from('chat_sessions')
+        .update({
+          user_id: 'deleted', // We use a placeholder instead of null to maintain referential integrity
+          messages: anonymizedMessages,
+          metrics: {
+            messageCount: anonymizedMessages.length,
+            duration: 0,
+            startTime: new Date().toISOString(),
+            lastMessageTime: new Date().toISOString()
+          },
+          status: 'deleted',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', sessionId);
+        
+      if (updateError) {
+        console.error('Error anonymizing session:', updateError);
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error in anonymizeSession:', error);
+      return false;
+    }
+  }
 
   static async getSessionHistory(userId: string) {
     try {
