@@ -1,4 +1,4 @@
-// app(auth)/_layout.tsx
+// app/(auth)/_layout.tsx - Updated version
 import { Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { useRouter, useSegments } from 'expo-router';
@@ -38,6 +38,12 @@ export default function AuthLayout() {
         name="forgot-password"
         options={{
           title: 'Reset Password',
+        }}
+      />
+      <Stack.Screen
+        name="reset-password"
+        options={{
+          title: 'Set New Password',
         }}
       />
     </Stack>

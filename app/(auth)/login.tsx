@@ -38,17 +38,42 @@ export default function LoginScreen() {
     }
   };
 
-  const handleLogin = async () => {
+  // Update this part in login.tsx (handleLogin function)
+
+const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert("Error", "Please fill in all fields");
       return;
     }
-
+  
     setLoading(true);
     try {
-      const user = await AuthService.signIn(email, password);
-      if (user) {
-        router.replace("/(tabs)");
+      console.log("Attempting login with email:", email);
+      
+      // First, check if there's an existing session and sign it out
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session) {
+        console.log("Found existing session, signing out first");
+        await supabase.auth.signOut();
+      }
+      
+      // Improved error handling for login
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
+  
+      if (error) throw error;
+      
+      if (data.user) {
+        console.log("Login successful for user:", data.user.id);
+        
+        // Add a delay before redirecting to avoid race conditions
+        setTimeout(() => {
+          router.replace("/(tabs)");
+        }, 500);
+      } else {
+        throw new Error("Login failed - no user returned");
       }
     } catch (error) {
       console.error("Login error:", error);
@@ -256,6 +281,7 @@ const styles = StyleSheet.create({
   linkButton: {
     marginTop: 16,
     alignItems: "center",
+    paddingVertical: 8,
   },
   linkText: {
     color: "#007AFF",

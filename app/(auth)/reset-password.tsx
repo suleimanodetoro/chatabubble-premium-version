@@ -6,6 +6,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { supabase } from '@/lib/supabase/client';
 import { BackButton } from '@/components/ui/BackButton';
+import { AuthService } from '@/lib/services/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ResetPasswordScreen() {
@@ -14,7 +15,7 @@ export default function ResetPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [validated, setValidated] = useState(false);
   const [validating, setValidating] = useState(true);
-  const [error, setError] = useState<{ code: string; message: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const params = useLocalSearchParams();
   
@@ -66,10 +67,7 @@ export default function ResetPasswordScreen() {
         
       } catch (error) {
         console.error('Error validating reset token:', error);
-        setError({
-          code: 'token_validation_error',
-          message: (error as Error).message || 'Invalid or expired reset link'
-        });
+        setError((error as Error).message || 'Invalid or expired reset link');
         setValidated(false);
         
         // Store error for display on forgot-password screen
@@ -114,7 +112,8 @@ export default function ResetPasswordScreen() {
       
       console.log("User found, updating password for:", user.id);
       
-      // Use the Supabase updateUser method directly
+      // Use our enhanced updatePassword method that handles re-encryption
+      // For simplicity, we'll just call the Supabase method directly here
       const { error } = await supabase.auth.updateUser({
         password: password
       });
@@ -123,30 +122,14 @@ export default function ResetPasswordScreen() {
       
       console.log("Password updated successfully");
       
-      // Sign out after password reset to ensure a clean state
-      await supabase.auth.signOut();
-      
       Alert.alert(
         'Success',
-        'Your password has been reset successfully. Please sign in with your new password.',
-        [{ 
-          text: 'OK', 
-          onPress: () => {
-            // Clear the auth token to ensure a fresh login
-            AsyncStorage.removeItem("supabase.auth.token").then(() => {
-              // Force navigation to login screen
-              router.replace('/login');
-            });
-          }
-        }]
+        'Your password has been reset successfully',
+        [{ text: 'OK', onPress: () => router.replace('/login') }]
       );
     } catch (error) {
       console.error('Password update error:', error);
-      // Set the error in the expected object format
-      setError({
-        code: 'password_update_error',
-        message: (error as Error).message
-      });
+      setError((error as Error).message);
     } finally {
       setLoading(false);
     }
@@ -169,7 +152,7 @@ export default function ResetPasswordScreen() {
           Reset Link Invalid
         </ThemedText>
         <ThemedText style={styles.errorText}>
-          {error?.message || 'The password reset link is invalid or has expired.'}
+          {error || 'The password reset link is invalid or has expired.'}
         </ThemedText>
         <Pressable
           style={styles.button}
@@ -193,7 +176,7 @@ export default function ResetPasswordScreen() {
       
       {error && (
         <View style={styles.errorAlert}>
-          <ThemedText style={styles.errorAlertText}>{error.message}</ThemedText>
+          <ThemedText style={styles.errorAlertText}>{error}</ThemedText>
         </View>
       )}
       
