@@ -15,7 +15,6 @@ interface AppState {
   source_language: Language | null;
   scenarios: Scenario[];
   activeSessions: Record<string, Session>;
-  isPremium: boolean; // Add this
   loadScenarios: () => Promise<void>;
 
   // Actions
@@ -27,7 +26,6 @@ interface AppState {
   addScenario: (scenario: Scenario) => void;
   saveSession: (session: Session) => Promise<void>;
   loadSession: (sessionId: string) => Promise<Session | null>;
-  setIsPremium: (status: boolean) => void; // Add this
 }
 
 const DEFAULT_SOURCE_LANGUAGE: Language = {
@@ -46,15 +44,12 @@ export const useAppStore = create<AppState>()(
       source_language: DEFAULT_SOURCE_LANGUAGE,
       scenarios: [],
       activeSessions: {},
-      isPremium: false, 
 
       setUser: (user) => set({ user }),
       setCurrentSession: (session) => set({ currentSession: session }),
       setCurrentScenario: (scenario) => set({ currentScenario: scenario }),
       settarget_language: (language) => set({ target_language: language }),
       setsource_language: (language) => set({ source_language: language }),
-      setIsPremium: (status) => set({ isPremium: status }), 
-      
 
       addScenario: (scenario) =>
         set((state) => {
@@ -62,34 +57,34 @@ export const useAppStore = create<AppState>()(
           return { scenarios: [...state.scenarios, scenario] };
         }),
 
-        saveSession: async (session) => {
-          console.log("Saving session:", session);
-          try {
-            // Make sure we have the latest messages
-            const messages = await StorageService.loadChatHistory(session.id);
-            const sessionToSave = {
-              ...session,
-              messages,
-              lastUpdated: Date.now()
-            };
-            
-            // Save using StorageService first
-            await StorageService.saveSession(sessionToSave);
-            
-            // Then update store state
-            set((state) => ({
-              activeSessions: {
-                ...state.activeSessions,
-                [session.id]: sessionToSave,
-              },
-              currentSession: sessionToSave,
-              target_language: session.target_language,
-            }));
-          } catch (error) {
-            console.error("Error saving session:", error);
-            throw error;
-          }
-        },
+      saveSession: async (session) => {
+        console.log("Saving session:", session);
+        try {
+          // Make sure we have the latest messages
+          const messages = await StorageService.loadChatHistory(session.id);
+          const sessionToSave = {
+            ...session,
+            messages,
+            lastUpdated: Date.now()
+          };
+          
+          // Save using StorageService first
+          await StorageService.saveSession(sessionToSave);
+          
+          // Then update store state
+          set((state) => ({
+            activeSessions: {
+              ...state.activeSessions,
+              [session.id]: sessionToSave,
+            },
+            currentSession: sessionToSave,
+            target_language: session.target_language,
+          }));
+        } catch (error) {
+          console.error("Error saving session:", error);
+          throw error;
+        }
+      },
 
       loadSession: async (sessionId) => {
         try {
@@ -105,8 +100,8 @@ export const useAppStore = create<AppState>()(
                 ...state.activeSessions,
                 [sessionId]: storedSession,
               },
-              currentSession: storedSession,  // Added line
-              target_language: storedSession.target_language, // Added line
+              currentSession: storedSession,
+              target_language: storedSession.target_language,
             }));
             return storedSession;
           }
@@ -129,32 +124,32 @@ export const useAppStore = create<AppState>()(
           return null;
         }
       },
-      // In useAppStore.ts, modify the loadScenarios function:
-loadScenarios: async () => {
-  try {
-    const user = get().user;
-    if (!user?.id) return;
 
-    const { data: scenarios, error } = await supabase
-      .from('scenarios')
-      .select('*')
-      .or(`created_by.eq.${user.id},is_public.eq.true`);
+      loadScenarios: async () => {
+        try {
+          const user = get().user;
+          if (!user?.id) return;
 
-    if (error) throw error;
+          const { data: scenarios, error } = await supabase
+            .from('scenarios')
+            .select('*')
+            .or(`created_by.eq.${user.id},is_public.eq.true`);
 
-    const transformedScenarios = scenarios.map(scenario => ({
-      ...scenario,
-      target_language: scenario.target_language,
-      category: scenario.category,
-      difficulty: scenario.difficulty,
-      persona: scenario.persona,
-    }));
+          if (error) throw error;
 
-    set({ scenarios: transformedScenarios });
-  } catch (error) {
-    console.error('Error loading scenarios:', error);
-  }
-},
+          const transformedScenarios = scenarios.map(scenario => ({
+            ...scenario,
+            target_language: scenario.target_language,
+            category: scenario.category,
+            difficulty: scenario.difficulty,
+            persona: scenario.persona,
+          }));
+
+          set({ scenarios: transformedScenarios });
+        } catch (error) {
+          console.error('Error loading scenarios:', error);
+        }
+      },
     }),
     {
       name: "app-storage",
@@ -164,8 +159,7 @@ loadScenarios: async () => {
         activeSessions: state.activeSessions,
         source_language: state.source_language,
         user: state.user,
-        isPremium: state.isPremium, 
-      }),
+      }), // Removed isPremium from partialize
     }
   )
 );

@@ -9,10 +9,7 @@ import { Session } from "@supabase/supabase-js";
 import { useAppStore } from "@/hooks/useAppStore";
 import * as Linking from "expo-linking";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { SubscriptionService } from "@/lib/services/subscription";
 import { ProfileService } from "@/lib/services/profile";
-import Purchases from "react-native-purchases";
-Purchases.setLogLevel(Purchases.LOG_LEVEL.VERBOSE);
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -27,29 +24,6 @@ export default function RootLayout() {
 
   // Initialize auth state
   useEffect(() => {
-    //sync subscription services
-    async function initServices() {
-      try {
-        await SubscriptionService.initialize();
-
-        // Set up purchase listener for subscription changes
-        Purchases.addCustomerInfoUpdateListener((info) => {
-          const isPremium =
-            info.entitlements.active["premium_access"]?.isActive ?? false;
-          if (typeof useAppStore.getState().setIsPremium === "function") {
-            useAppStore.getState().setIsPremium(isPremium);
-            console.log("Subscription status updated:", isPremium);
-          }
-        });
-
-        return () => {
-          // No explicit cleanup needed as the SDK handles this internally
-        };
-      } catch (error) {
-        console.error("Error initializing services:", error);
-      }
-    }
-
     const initializeAuth = async () => {
       try {
         // Check for stored session
@@ -95,12 +69,7 @@ export default function RootLayout() {
       }
     };
 
-    const cleanup = initServices();
     initializeAuth();
-
-    return () => {
-      cleanup.then((cleanupFn) => cleanupFn && cleanupFn());
-    };
   }, []);
 
   // Handle auth state changes

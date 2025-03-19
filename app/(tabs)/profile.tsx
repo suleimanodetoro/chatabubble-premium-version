@@ -1,4 +1,4 @@
-// app/(tabs)/profile.tsx - Updated with enhanced account deletion
+// app/(tabs)/profile.tsx
 import {
     StyleSheet,
     Alert,
@@ -18,9 +18,7 @@ import {
   import { MetricsService } from "@/lib/services/metrics";
   import { supabase } from "@/lib/supabase/client";
   import { EncryptionService } from "@/lib/services/encryption";
-  import { SubscriptionService } from "@/lib/services/subscription";
   import { AuthService } from "@/lib/services/auth";
-  import SubscriptionPanel from "@/components/ui/SubscriptionPanel";
   
   export default function ProfileScreen() {
     const router = useRouter();
@@ -32,17 +30,14 @@ import {
     const [metrics, setMetrics] = useState<any>(null);
     const [isEmailModalVisible, setIsEmailModalVisible] = useState(false);
     const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
-    const [isSubscriptionModalVisible, setIsSubscriptionModalVisible] = useState(false);
     const [isConfirmDeleteModalVisible, setIsConfirmDeleteModalVisible] = useState(false);
     const [deleteConfirmation, setDeleteConfirmation] = useState("");
     const [newEmail, setNewEmail] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
-    const [isSubscribed, setIsSubscribed] = useState(false);
   
     useEffect(() => {
       loadUserMetrics();
-      checkSubscriptionStatus();
     }, [user?.id]);
   
     const loadUserMetrics = async () => {
@@ -57,15 +52,6 @@ import {
         Alert.alert("Error", "Failed to load user statistics");
       } finally {
         setIsLoading(false);
-      }
-    };
-  
-    const checkSubscriptionStatus = async () => {
-      try {
-        const status = await SubscriptionService.checkSubscriptionStatus();
-        setIsSubscribed(status);
-      } catch (error) {
-        console.error("Error checking subscription:", error);
       }
     };
   
@@ -240,22 +226,6 @@ import {
       </ThemedView>
     );
   
-    const renderSubscriptionBanner = () => (
-      <Pressable
-        style={[styles.subscriptionBanner, isSubscribed ? styles.subscriptionBannerActive : {}]}
-        onPress={() => setIsSubscriptionModalVisible(true)}
-      >
-        <ThemedText style={styles.subscriptionBannerTitle}>
-          {isSubscribed ? 'Premium Active' : 'Upgrade to Premium'}
-        </ThemedText>
-        <ThemedText style={styles.subscriptionBannerText}>
-          {isSubscribed 
-            ? 'View your subscription details'
-            : 'Get unlimited conversations and more features'}
-        </ThemedText>
-      </Pressable>
-    );
-  
     return (
       <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
         <ThemedView style={styles.container}>
@@ -275,8 +245,6 @@ import {
               )}
             </ThemedView>
   
-            {renderSubscriptionBanner()}
-  
             {renderStats()}
   
             <ThemedView style={styles.section}>
@@ -294,14 +262,6 @@ import {
                 onPress={() => setIsPasswordModalVisible(true)}
               >
                 <ThemedText style={styles.buttonText}>Update Password</ThemedText>
-              </Pressable>
-              <Pressable
-                style={styles.button}
-                onPress={() => setIsSubscriptionModalVisible(true)}
-              >
-                <ThemedText style={styles.buttonText}>
-                  {isSubscribed ? 'Manage Subscription' : 'Upgrade to Premium'}
-                </ThemedText>
               </Pressable>
             </ThemedView>
   
@@ -403,23 +363,6 @@ import {
               </ThemedView>
             </View>
           </Modal>
-          
-          {/* Subscription Modal */}
-          <Modal
-            visible={isSubscriptionModalVisible}
-            animationType="slide"
-            transparent={false}
-            onRequestClose={() => setIsSubscriptionModalVisible(false)}
-          >
-            <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
-              <ScrollView contentContainerStyle={styles.subscriptionModalContainer}>
-                <SubscriptionPanel 
-                  onClose={() => setIsSubscriptionModalVisible(false)}
-                  isModal={true}
-                />
-              </ScrollView>
-            </SafeAreaView>
-          </Modal>
   
           {/* Account Deletion Confirmation Modal */}
           <Modal
@@ -441,18 +384,7 @@ import {
                   <ThemedText style={styles.deletionItem}>• Your profile information</ThemedText>
                   <ThemedText style={styles.deletionItem}>• Custom scenarios you've created</ThemedText>
                   <ThemedText style={styles.deletionItem}>• Learning progress and statistics</ThemedText>
-                  {isSubscribed && (
-                    <ThemedText style={styles.deletionItem}>• Active subscriptions (must be canceled separately)</ThemedText>
-                  )}
                 </View>
-  
-                {isSubscribed && (
-                  <ThemedText style={styles.subscriptionWarning}>
-                    Note: Deleting your account will not automatically cancel your subscription. 
-                    Please cancel your subscription through the App Store or Google Play before 
-                    deleting your account.
-                  </ThemedText>
-                )}
                 
                 <ThemedText style={styles.confirmInstructions}>
                   Type DELETE to confirm:
@@ -527,27 +459,6 @@ import {
       fontSize: 14,
       opacity: 0.6,
       marginTop: 4,
-    },
-    subscriptionBanner: {
-      margin: 15,
-      padding: 15,
-      borderRadius: 12,
-      backgroundColor: "#f0f7ff",
-      borderLeftWidth: 4,
-      borderLeftColor: "#007AFF",
-    },
-    subscriptionBannerActive: {
-      backgroundColor: "#e6fff0",
-      borderLeftColor: "#28a745",
-    },
-    subscriptionBannerTitle: {
-      fontSize: 17,
-      fontWeight: "600",
-      marginBottom: 4,
-    },
-    subscriptionBannerText: {
-      fontSize: 14,
-      color: "#666",
     },
     statsSection: {
       padding: 20,
@@ -664,13 +575,6 @@ import {
       marginBottom: 8,
       lineHeight: 20,
     },
-    subscriptionWarning: {
-      fontSize: 14,
-      color: "#ff3b30",
-      marginBottom: 20,
-      fontWeight: "500",
-      textAlign: "center",
-    },
     confirmInstructions: {
       fontSize: 16,
       fontWeight: "600",
@@ -751,7 +655,5 @@ import {
       color: "#fff",
       fontSize: 16,
     },
-    subscriptionModalContainer: {
-      flexGrow: 1,
-    },
+
   });

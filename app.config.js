@@ -31,9 +31,7 @@ export default {
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       revenuecatIosKey: process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY,
       revenuecatAndroidKey: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY,
-      eas: {
-        projectId: "your-project-id", // Replace with your actual EAS project ID if applicable
-      },
+      
     },
   },
 };

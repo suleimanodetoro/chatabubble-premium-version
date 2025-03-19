@@ -10,18 +10,9 @@ import { useAppStore } from "../../hooks/useAppStore";
 import { Scenario, Session, ChatMessage } from '@/types';
 import { generateId } from "@/lib/utils/ids";
 import { StorageService } from "@/lib/services/storage";
-import { SubscriptionService } from "@/lib/services/subscription";
-
-import SubscriptionLimitModal from "@/components/ui/SubscriptionLimitModal";
-
-// Maximum number of free sessions allowed
-const MAX_FREE_SESSIONS = 3;
 
 export default function ScenariosScreen() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [isSubscribed, setIsSubscribed] = useState(false);
-  const [sessionCount, setSessionCount] = useState(0);
-  const [showLimitModal, setShowLimitModal] = useState(false);
   const [loading, setLoading] = useState(true);
   
   const {
@@ -31,26 +22,15 @@ export default function ScenariosScreen() {
     saveSession,
     source_language,
     loadScenarios,
-    user,
-    isPremium
+    user
   } = useAppStore();
 
-  // Load scenarios and check subscription status
+  // Load scenarios
   useEffect(() => {
     const initialize = async () => {
       setLoading(true);
       try {
         await loadScenarios();
-        
-        if (user?.id) {
-          // Check subscription status
-          setIsSubscribed(isPremium);
-          
-          // Count active sessions
-          const sessions = await StorageService.getActiveSessions();
-          const userSessions = sessions.filter(s => s.userId === user.id);
-          setSessionCount(userSessions.length);
-        }
       } catch (error) {
         console.error('Error initializing scenarios screen:', error);
       } finally {
@@ -59,7 +39,7 @@ export default function ScenariosScreen() {
     };
     
     initialize();
-  }, [loadScenarios, user?.id, isPremium]);
+  }, [loadScenarios, user?.id]);
 
   const clearStorage = async () => {
     try {
@@ -73,12 +53,6 @@ export default function ScenariosScreen() {
 
   const handleScenarioPress = async (scenario: Scenario) => {
     console.log('Pressing scenario:', scenario);
-    
-    // Check subscription status for limits
-    if (!isSubscribed && sessionCount >= MAX_FREE_SESSIONS) {
-      setShowLimitModal(true);
-      return;
-    }
     
     if (!source_language || !scenario.target_language) {
       console.log('Missing languages:', { source_language, target_language: scenario.target_language });
@@ -224,21 +198,6 @@ export default function ScenariosScreen() {
         <ThemedText style={styles.headerSubtitle}>
           Choose a scenario to start practicing or create your own
         </ThemedText>
-        
-        {/* Subscription banner - only shows for non-premium users */}
-        {!isSubscribed && (
-          <ThemedView style={styles.usageBanner}>
-            <ThemedText style={styles.usageBannerText}>
-              {sessionCount}/{MAX_FREE_SESSIONS} free conversations used
-            </ThemedText>
-            <Pressable 
-              style={styles.upgradePill}
-              onPress={() => router.push('/(tabs)/profile')}
-            >
-              <ThemedText style={styles.upgradePillText}>Upgrade</ThemedText>
-            </Pressable>
-          </ThemedView>
-        )}
       </ThemedView>
   
       <ThemedView style={styles.searchContainer}>
@@ -268,14 +227,6 @@ export default function ScenariosScreen() {
             </ThemedText>
           </ThemedView>
         }
-      />
-  
-      {/* Subscription limit modal */}
-      <SubscriptionLimitModal 
-        visible={showLimitModal}
-        onClose={() => setShowLimitModal(false)}
-        sessionCount={sessionCount}
-        maxFreeSessions={MAX_FREE_SESSIONS}
       />
     </ThemedView>
   );
@@ -405,30 +356,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "#dee2e6",
-  },
-  usageBanner: {
-    marginTop: 10,
-    padding: 8,
-    backgroundColor: '#f0f7ff',
-    borderRadius: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  usageBannerText: {
-    fontSize: 14,
-    color: '#0066cc',
-  },
-  upgradePill: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  upgradePillText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
   },
   personaInfo: {
     flexDirection: "row",
