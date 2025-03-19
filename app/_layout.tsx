@@ -10,6 +10,8 @@ import { useAppStore } from "@/hooks/useAppStore";
 import * as Linking from "expo-linking";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ProfileService } from "@/lib/services/profile";
+import { StatusBar } from 'expo-status-bar';
+import { ThemeProvider } from "@/lib/theme/ThemeProvider";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -352,27 +354,32 @@ export default function RootLayout() {
     headerShadowVisible: false,
   };
 
-  return !session ? (
-    <Stack screenOptions={commonStackOptions}>
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="reset-callback" />
-    </Stack>
-  ) : (
-    <Stack screenOptions={commonStackOptions}>
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen
-        name="(chat)"
-        options={{
-          presentation: "fullScreenModal",
-        }}
-      />
-      <Stack.Screen
-        name="create-scenario"
-        options={{
-          presentation: "modal",
-          title: "Create Scenario",
-        }}
-      />
-    </Stack>
+  return (
+    <ThemeProvider>
+      <StatusBar style="auto" />
+      {!session ? (
+        <Stack screenOptions={commonStackOptions}>
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="reset-callback" />
+        </Stack>
+      ) : (
+        <Stack screenOptions={commonStackOptions}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="(chat)"
+            options={{
+              presentation: "fullScreenModal",
+            }}
+          />
+          <Stack.Screen
+            name="create-scenario"
+            options={{
+              presentation: "modal",
+              title: "Create Scenario",
+            }}
+          />
+        </Stack>
+      )}
+    </ThemeProvider>
   );
 }

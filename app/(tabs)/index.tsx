@@ -1,14 +1,16 @@
 // app/(tabs)/index.tsx
-import { StyleSheet, Pressable, ScrollView, View } from "react-native";
+import React, { useState, useEffect } from "react";
+import { StyleSheet, ScrollView, View, Pressable, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
-import { ThemedView } from "@/components/ThemedView";
-import { ThemedText } from "@/components/ThemedText";
-import { HelloWave } from "@/components/HelloWave";
-import { useAppStore } from "@/hooks/useAppStore";
-import { Session } from "@/types";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useState, useEffect } from "react";
+import { useAppStore } from "@/hooks/useAppStore";
 import { MetricsService } from "@/lib/services/metrics";
+import { Session } from "@/types";
+import { useTheme } from "@/lib/theme/theme";
+import { Heading1, Heading2, Heading3, Body1, Body2, DisplayText, Caption } from "@/components/ui/Typography";
+import { Card, CardHeader, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Feather } from '@expo/vector-icons';
 
 // Add proper typing for metrics
 interface UserMetrics {
@@ -36,6 +38,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const [metrics, setMetrics] = useState<UserMetrics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const theme = useTheme();
 
   useEffect(() => {
     loadMetrics();
@@ -49,7 +52,7 @@ export default function HomeScreen() {
     try {
       setIsLoading(true);
       const userMetrics = await MetricsService.getUserMetrics(user.id);
-      console.log("Loaded metrics:", userMetrics); // Debug log
+      console.log("Loaded metrics:", userMetrics);
       setMetrics(userMetrics);
     } catch (error) {
       console.error("Error loading metrics:", error);
@@ -57,120 +60,273 @@ export default function HomeScreen() {
       setIsLoading(false);
     }
   };
-  const renderWelcomeSection = () => (
-    <ThemedView style={styles.welcomeSection}>
-      <HelloWave />
+
+  const renderGreeting = () => {
+    const now = new Date();
+    const hour = now.getHours();
+    let greeting = "Hello";
+    
+    if (hour < 12) greeting = "Good morning";
+    else if (hour < 18) greeting = "Good afternoon";
+    else greeting = "Good evening";
+    
+    return (
       <View style={styles.welcomeHeader}>
-        <ThemedText style={styles.welcomeText}>
-          Welcome back{user?.name ? `, ${user.name}` : ""}!
-        </ThemedText>
+        <Heading1>{greeting}, {user?.name || "there"}!</Heading1>
+        
         {(metrics?.streak ?? 0) > 0 && (
-          <ThemedText style={styles.streakText}>
-            🔥 {metrics?.streak} day streak
-          </ThemedText>
+          <View style={styles.streakContainer}>
+            <Feather name="zap" size={20} color={theme.colors.warning.main} />
+            <Body1 
+              style={styles.streakText}
+              color={theme.colors.warning.main}
+            >
+              {metrics?.streak} day streak
+            </Body1>
+          </View>
         )}
       </View>
-      <Pressable
-        style={styles.startButton}
-        onPress={() => router.push("/(tabs)/scenarios")}
-      >
-        <ThemedText style={styles.startButtonText}>
-          Start New Conversation
-        </ThemedText>
-      </Pressable>
-    </ThemedView>
-  );
-
-  const renderQuickStats = () => (
-    <ThemedView style={styles.statsContainer}>
-      <ThemedView style={styles.statCard}>
-        <ThemedText style={styles.statNumber}>
-          {isLoading ? "..." : metrics?.totalSessions || 0}
-        </ThemedText>
-        <ThemedText style={styles.statLabel}>Total Chats</ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.statCard}>
-        <ThemedText style={styles.statNumber}>
-          {isLoading ? "..." : Math.round(metrics?.totalMinutesPracticed || 0)}
-        </ThemedText>
-        <ThemedText style={styles.statLabel}>Minutes</ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.statCard}>
-        <ThemedText style={styles.statNumber}>
-          {isLoading
-            ? "..."
-            : Object.keys(metrics?.languageProgress || {}).length}
-        </ThemedText>
-        <ThemedText style={styles.statLabel}>Languages</ThemedText>
-      </ThemedView>
-    </ThemedView>
-  );
-
-  // In renderRecentSection:
-  const renderRecentSection = () => {
-    const recentSessions = metrics?.recentSessions || [];
-
-    return (
-      <ThemedView style={styles.recentSection}>
-        <ThemedText style={styles.sectionTitle}>Recent Activity</ThemedText>
-        {recentSessions.length > 0 ? (
-          <View>
-            {recentSessions.map((session) => {
-              // Check if the session has the required data
-              if (!session?.target_language?.name) {
-                console.warn("Session missing target language:", session);
-                return null;
-              }
-
-              return (
-                <Pressable
-                  key={session.id}
-                  onPress={() => router.push(`/(chat)/${session.id}`)}
-                  style={({ pressed }) => [
-                    styles.sessionCard,
-                    pressed && styles.sessionCardPressed,
-                  ]}
-                >
-                  <View style={styles.sessionHeader}>
-                    <ThemedText style={styles.sessionTitle} numberOfLines={1}>
-                      {session.scenario?.title || "Practice Session"}
-                    </ThemedText>
-                    <ThemedText style={styles.sessionLanguage}>
-                      {session.target_language.name}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.sessionInfo}>
-                    <ThemedText style={styles.sessionDate}>
-                      {new Date(session.startTime).toLocaleDateString()}
-                    </ThemedText>
-                    <ThemedText style={styles.sessionMetrics}>
-                      {session.messages?.length || 0} messages •
-                      {Math.round((session.metrics?.duration || 0) / 60000)}m
-                    </ThemedText>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : (
-          <ThemedView style={styles.emptyState}>
-            <ThemedText style={styles.emptyStateText}>
-              No conversations yet. Start practicing!
-            </ThemedText>
-          </ThemedView>
-        )}
-      </ThemedView>
     );
   };
+
+  const renderTodaysFocus = () => {
+    const recentActivity = metrics?.recentSessions?.[0];
+
+    return (
+      <Card
+        variant="elevated"
+        style={styles.focusCard}
+        onPress={() => router.push("/(tabs)/scenarios")}
+      >
+        <CardHeader 
+          title="Today's Focus"
+          action={
+            <Button
+              variant="icon"
+              icon="more-horizontal"
+              onPress={() => {}}
+              size="small"
+            />
+          }
+        />
+        <CardContent>
+          {recentActivity ? (
+            <View>
+              <Body1 style={styles.focusTitle}>Continue your progress</Body1>
+              <Body2 style={styles.focusSubtitle}>
+                {recentActivity.scenario?.title || "Practice Session"}
+              </Body2>
+              <Button
+                variant="primary"
+                size="medium"
+                icon="play"
+                style={styles.continueButton}
+                onPress={() => router.push(`/(chat)/${recentActivity.id}`)}
+              >
+                Continue Learning
+              </Button>
+            </View>
+          ) : (
+            <View>
+              <Body1 style={styles.focusTitle}>Start your learning journey</Body1>
+              <Body2 style={styles.focusSubtitle}>
+                Choose a scenario to begin practicing
+              </Body2>
+              <Button
+                variant="primary"
+                size="medium"
+                icon="plus"
+                style={styles.continueButton}
+                onPress={() => router.push("/(tabs)/scenarios")}
+              >
+                Start New Conversation
+              </Button>
+            </View>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderProgressSummary = () => {
+    return (
+      <Card variant="elevated" style={styles.progressCard}>
+        <CardHeader title="Your Progress" />
+        <CardContent>
+          <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+              <Heading2 color={theme.colors.primary.main}>
+                {isLoading ? "--" : metrics?.totalSessions || 0}
+              </Heading2>
+              <Caption>Total Sessions</Caption>
+            </View>
+            
+            <View style={styles.statDivider} />
+            
+            <View style={styles.statItem}>
+              <Heading2 color={theme.colors.primary.main}>
+                {isLoading ? "--" : Math.round(metrics?.totalMinutesPracticed || 0)}
+              </Heading2>
+              <Caption>Minutes</Caption>
+            </View>
+            
+            <View style={styles.statDivider} />
+            
+            <View style={styles.statItem}>
+              <Heading2 color={theme.colors.primary.main}>
+                {isLoading ? "--" : Object.keys(metrics?.languageProgress || {}).length}
+              </Heading2>
+              <Caption>Languages</Caption>
+            </View>
+          </View>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderRecentActivities = () => {
+    const recentSessions = metrics?.recentSessions || [];
+
+    if (isLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary.main} />
+        </View>
+      );
+    }
+
+    if (recentSessions.length === 0) {
+      return (
+        <Card variant="flat" style={styles.emptyStateCard}>
+          <CardContent>
+            <Body1 style={styles.emptyStateText}>
+              No conversations yet. Start practicing!
+            </Body1>
+            <Button
+              variant="primary"
+              onPress={() => router.push("/(tabs)/scenarios")}
+              style={styles.emptyStateButton}
+            >
+              Browse Scenarios
+            </Button>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return (
+      <View style={styles.recentActivitiesContainer}>
+        <View style={styles.sectionHeader}>
+          <Heading3>Recent Conversations</Heading3>
+          <Button
+            variant="tertiary"
+            size="small"
+            onPress={() => {}}
+          >
+            See all
+          </Button>
+        </View>
+        
+        <ScrollView 
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.recentSessionsScrollContent}
+        >
+          {recentSessions.map((session) => {
+            // Safely check for required properties
+            if (!session?.target_language?.name) {
+              return null;
+            }
+            
+            const formattedDate = new Date(session.startTime).toLocaleDateString(undefined, {
+              month: 'short',
+              day: 'numeric'
+            });
+            
+            return (
+              <Card
+                key={session.id}
+                variant="elevated" 
+                style={styles.sessionCard}
+                onPress={() => router.push(`/(chat)/${session.id}`)}
+              >
+                <CardContent>
+                  <View style={styles.sessionCardHeader}>
+                    <View style={[
+                      styles.languageTag, 
+                      { backgroundColor: theme.colors.primary.light }
+                    ]}>
+                      <Caption style={styles.languageTagText}>
+                        {session.target_language.name}
+                      </Caption>
+                    </View>
+                    <Caption>{formattedDate}</Caption>
+                  </View>
+                  
+                  <Body1 
+                    style={styles.sessionTitle}
+                    numberOfLines={2}
+                  >
+                    {session.scenario?.title || "Practice Session"}
+                  </Body1>
+                  
+                  <View style={styles.sessionStats}>
+                    <View style={styles.sessionStat}>
+                      <Feather name="message-circle" size={14} color={theme.colors.text.secondary} />
+                      <Caption style={styles.sessionStatText}>
+                        {session.messages?.length || 0} messages
+                      </Caption>
+                    </View>
+                    
+                    <View style={styles.sessionStat}>
+                      <Feather name="clock" size={14} color={theme.colors.text.secondary} />
+                      <Caption style={styles.sessionStatText}>
+                        {Math.round((session.metrics?.duration || 0) / 60000)}m
+                      </Caption>
+                    </View>
+                  </View>
+                  
+                  <Button 
+                    variant="secondary"
+                    size="small"
+                    style={styles.continueSessionButton}
+                    icon="arrow-right"
+                    iconPosition="right"
+                  >
+                    Continue
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
+          
+          <Card
+            variant="outlined"
+            style={styles.newSessionCard}
+            onPress={() => router.push("/(tabs)/scenarios")}
+          >
+            <CardContent style={styles.newSessionCardContent}>
+              <View style={styles.newSessionIconContainer}>
+                <Feather name="plus" size={24} color={theme.colors.primary.main} />
+              </View>
+              <Body1 style={styles.newSessionText}>Start New</Body1>
+            </CardContent>
+          </Card>
+        </ScrollView>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <ScrollView
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {renderWelcomeSection()}
-        {renderQuickStats()}
-        {renderRecentSection()}
+        {renderGreeting()}
+        {renderTodaysFocus()}
+        {renderProgressSummary()}
+        {renderRecentActivities()}
       </ScrollView>
     </SafeAreaView>
   );
@@ -179,119 +335,137 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
   },
-  contentContainer: {
+  scrollContent: {
     flexGrow: 1,
-  },
-  welcomeSection: {
-    padding: 20,
-    paddingBottom: 30,
+    padding: 16,
   },
   welcomeHeader: {
-    marginTop: 10,
-    alignItems: "center",
+    marginBottom: 24,
   },
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: "700",
-    textAlign: "center",
+  streakContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
   },
   streakText: {
-    fontSize: 16,
-    color: "#FF9500",
-    marginTop: 5,
+    marginLeft: 6,
   },
-  startButton: {
-    backgroundColor: "#007AFF",
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 20,
-    alignSelf: "center",
+  focusCard: {
+    marginBottom: 20,
   },
-  startButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
+  focusTitle: {
     fontWeight: "600",
+    marginBottom: 4,
+  },
+  focusSubtitle: {
+    marginBottom: 16,
+    opacity: 0.7,
+  },
+  continueButton: {
+    alignSelf: "flex-start",
+  },
+  progressCard: {
+    marginBottom: 24,
   },
   statsContainer: {
     flexDirection: "row",
-    marginHorizontal: 20,
-    padding: 15,
-    backgroundColor: "#f8f9fa",
-    borderRadius: 16,
-    marginBottom: 20,
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  statCard: {
+  statItem: {
     flex: 1,
     alignItems: "center",
   },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#007AFF",
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: "#E0E0E0",
   },
-  statLabel: {
-    fontSize: 13,
-    color: "#666",
-    marginTop: 4,
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
   },
-  recentSection: {
-    paddingHorizontal: 20,
+  recentActivitiesContainer: {
+    marginBottom: 24,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    marginBottom: 15,
+  recentSessionsScrollContent: {
+    paddingRight: 16,
   },
   sessionCard: {
-    padding: 15,
-    backgroundColor: "#f8f9fa",
-    borderRadius: 12,
-    marginBottom: 10,
+    width: 200,
+    marginRight: 12,
   },
-  sessionCardPressed: {
-    opacity: 0.7,
-  },
-  sessionHeader: {
+  sessionCardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 8,
   },
-  sessionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    flex: 1,
-  },
-  sessionLanguage: {
-    fontSize: 14,
-    color: "#007AFF",
-    fontWeight: "500",
-  },
-  sessionInfo: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  sessionDate: {
-    fontSize: 13,
-    color: "#666",
-  },
-  sessionMetrics: {
-    fontSize: 13,
-    color: "#666",
-  },
-  emptyState: {
-    padding: 30,
-    alignItems: "center",
-    backgroundColor: "#f8f9fa",
+  languageTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: 12,
   },
+  languageTagText: {
+    color: "#fff",
+  },
+  sessionTitle: {
+    fontWeight: "600",
+    marginBottom: 12,
+    height: 48,
+  },
+  sessionStats: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  sessionStat: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  sessionStatText: {
+    marginLeft: 4,
+  },
+  continueSessionButton: {
+    alignSelf: "flex-start",
+  },
+  newSessionCard: {
+    width: 120,
+    marginRight: 12,
+    justifyContent: "center",
+  },
+  newSessionCardContent: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  newSessionIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#F5F5F5",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  newSessionText: {
+    fontWeight: "500",
+  },
+  loadingContainer: {
+    padding: 20,
+    alignItems: "center",
+  },
+  emptyStateCard: {
+    padding: 16,
+    alignItems: "center",
+  },
   emptyStateText: {
-    fontSize: 15,
-    color: "#666",
     textAlign: "center",
+    marginBottom: 16,
+  },
+  emptyStateButton: {
+    alignSelf: "center",
   },
 });

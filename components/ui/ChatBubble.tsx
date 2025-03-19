@@ -1,14 +1,14 @@
 // components/ui/ChatBubble.tsx
 import React, { memo, useCallback, useState, useEffect } from "react";
-import { StyleSheet, View, Pressable, Alert } from "react-native";
-import { ThemedText } from "../ThemedText";
-import { useThemeColor } from "@/hooks/useThemeColor";
+import { StyleSheet, View, Pressable, Alert, TouchableOpacity, Animated } from "react-native";
 import { ChatMessage } from "@/types";
+import { Body1, Body2, Caption } from "./Typography";
+import { useTheme } from "@/lib/theme/theme";
 import { useChatContext } from "../../contexts/ChatContext";
 import { OpenAIService } from "../../lib/services/openai";
 import { useAppStore } from "../../hooks/useAppStore";
 import { SpeechService } from "@/lib/services/speech";
-import { Ionicons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { generateId } from '@/lib/utils/ids';
 import { StorageService } from '@/lib/services/storage';
 
@@ -23,8 +23,12 @@ export const ChatBubble = memo(function ChatBubble({
   const target_language = useAppStore((state) => state.target_language);
   const currentScenario = useAppStore((state) => state.currentScenario);
   const setCurrentSession = useAppStore((state) => state.setCurrentSession);
+  
+  const theme = useTheme();
 
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isTranslationVisible, setIsTranslationVisible] = useState(false);
+  const [animationValue] = useState(new Animated.Value(0));
   const isUser = message.sender === "user";
 
   useEffect(() => {
@@ -34,6 +38,22 @@ export const ChatBubble = memo(function ChatBubble({
       }
     };
   }, [isSpeaking]);
+
+  useEffect(() => {
+    if (isTranslationVisible) {
+      Animated.timing(animationValue, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(animationValue, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [isTranslationVisible, animationValue]);
 
   const handleSpeak = useCallback(async () => {
     if (isSpeaking) {
@@ -67,6 +87,10 @@ export const ChatBubble = memo(function ChatBubble({
       setIsSpeaking(false);
     }
   }, []);
+  
+  const toggleTranslation = () => {
+    setIsTranslationVisible(!isTranslationVisible);
+  };
 
   const handleEdit = useCallback(
     async (editType: "original" | "translation") => {
@@ -237,56 +261,115 @@ export const ChatBubble = memo(function ChatBubble({
     ]);
   }, [handleEdit, isUser]);
 
-  const backgroundColor = useThemeColor(
-    {
-      light: isUser ? "#007AFF" : "#E9ECEF",
-      dark: isUser ? "#0A84FF" : "#2C2C2E",
-    },
-    "background"
-  );
-
-  const textColor = useThemeColor(
-    { light: isUser ? "#FFFFFF" : "#000000", dark: "#FFFFFF" },
-    "text"
-  );
+  const backgroundColor = isUser
+    ? theme.colors.primary.main
+    : theme.colors.background.paper;
+  
+  const textColor = isUser
+    ? theme.colors.primary.contrast
+    : theme.colors.text.primary;
+  
+  const translationOpacity = animationValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  
+  const translationHeight = animationValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 30],
+  });
 
   return (
-    <Pressable onLongPress={handleLongPress}>
-      <View style={[styles.container, isUser ? styles.userContainer : styles.assistantContainer]}>
-        <View
-          style={[
-            styles.bubble,
-            { backgroundColor },
-            isUser ? styles.userBubble : styles.assistantBubble,
-          ]}
-        >
-          <View style={styles.messageContent}>
-            <ThemedText style={[styles.originalText, { color: textColor }]}>
-              {message.content.original}
-            </ThemedText>
-            <ThemedText style={[styles.translatedText, { color: textColor, opacity: 0.8 }]}>
-              {message.content.translated}
-            </ThemedText>
-            {message.isEdited && (
-              <ThemedText style={[styles.editedText, { color: textColor, opacity: 0.6 }]}>
-                edited
-              </ThemedText>
-            )}
-          </View>
-
-          <Pressable
-            style={[styles.speakerIcon, isSpeaking && styles.speakerIconActive]}
-            onPress={handleSpeak}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+    <Pressable 
+      style={[
+        styles.container, 
+        isUser ? styles.userContainer : styles.assistantContainer
+      ]} 
+      onLongPress={handleLongPress}
+    >
+      <View
+        style={[
+          styles.bubble,
+          { 
+            backgroundColor,
+            borderColor: isUser ? 'transparent' : theme.colors.divider,
+          },
+          isUser ? styles.userBubble : styles.assistantBubble,
+          !isUser && styles.assistantBubbleShadow,
+        ]}
+      >
+        <View style={styles.messageContent}>
+          <Body1 style={styles.originalText} color={textColor}>
+            {message.content.original}
+          </Body1>
+          
+          <Animated.View
+            style={[
+              styles.translationContainer,
+              {
+                opacity: translationOpacity,
+                height: translationHeight,
+                overflow: 'hidden',
+              },
+            ]}
           >
-            {isSpeaking ? (
-              <View style={styles.stopIcon} />
-            ) : (
-              <Ionicons name="volume-high" size={18} color={textColor} />
+            <Body2 
+              style={styles.translatedText} 
+              color={isUser ? theme.colors.primary.light : theme.colors.text.secondary}
+            >
+              {message.content.translated}
+            </Body2>
+          </Animated.View>
+          
+          <View style={styles.messageFooter}>
+            {message.isEdited && (
+              <Caption
+                style={styles.editedText}
+                color={isUser ? theme.colors.primary.light : theme.colors.text.hint}
+              >
+                edited
+              </Caption>
             )}
-          </Pressable>
+            
+            <TouchableOpacity 
+              style={styles.translationToggle}
+              onPress={toggleTranslation}
+            >
+              <Caption
+                color={isUser ? theme.colors.primary.light : theme.colors.text.hint}
+              >
+                {isTranslationVisible ? "Hide translation" : "Show translation"}
+              </Caption>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        <TouchableOpacity
+          style={[styles.speakerButton, isSpeaking && styles.speakerButtonActive]}
+          onPress={handleSpeak}
+        >
+          {isSpeaking ? (
+            <Feather 
+              name="square" 
+              size={16} 
+              color={isUser ? theme.colors.primary.contrast : theme.colors.primary.main} 
+            />
+          ) : (
+            <Feather 
+              name="volume-2" 
+              size={16} 
+              color={isUser ? theme.colors.primary.contrast : theme.colors.primary.main} 
+            />
+          )}
+        </TouchableOpacity>
       </View>
+      
+      <Caption 
+        style={styles.timestamp}
+        color={theme.colors.text.hint}
+      >
+        {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+      </Caption>
     </Pressable>
   );
 });
@@ -294,21 +377,16 @@ export const ChatBubble = memo(function ChatBubble({
 const styles = StyleSheet.create({
   container: {
     width: "100%",
-    paddingHorizontal: 4,
-    marginVertical: 4,
+    paddingHorizontal: 8,
+    marginVertical: 8,
   },
   bubble: {
-    maxWidth: "80%",
+    maxWidth: "85%",
+    borderRadius: 16,
+    borderWidth: 1,
     padding: 12,
-    borderRadius: 20,
     position: "relative",
     minWidth: 60,
-  },
-  stopIcon: {
-    width: 18,
-    height: 18,
-    backgroundColor: "red",
-    borderRadius: 2,
   },
   userContainer: {
     alignItems: "flex-end",
@@ -317,41 +395,61 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   userBubble: {
-    borderTopRightRadius: 4,
-    marginLeft: 40,
+    borderBottomRightRadius: 4,
   },
   assistantBubble: {
-    borderTopLeftRadius: 4,
-    marginRight: 40,
+    borderBottomLeftRadius: 4,
+  },
+  assistantBubbleShadow: {
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   messageContent: {
     marginRight: 28,
   },
   originalText: {
-    fontSize: 16,
     marginBottom: 4,
-    lineHeight: 20,
   },
-  translatedText: {
-    fontSize: 14,
-    lineHeight: 18,
-  },
-  editedText: {
-    fontSize: 12,
+  translationContainer: {
     marginTop: 4,
   },
-  speakerIcon: {
+  translatedText: {
+    fontStyle: 'italic',
+  },
+  messageFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  editedText: {
+    marginRight: 8,
+  },
+  translationToggle: {
+    padding: 4,
+  },
+  speakerButton: {
     position: "absolute",
-    top: 10,
-    right: 10,
-    width: 24,
-    height: 24,
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.2)",
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.05)",
   },
-  speakerIconActive: {
-    backgroundColor: "rgba(0,0,0,0.1)",
+  speakerButtonActive: {
+    backgroundColor: "rgba(255,0,0,0.15)",
+  },
+  timestamp: {
+    marginTop: 2,
+    marginHorizontal: 4,
   },
 });

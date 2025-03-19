@@ -1,19 +1,119 @@
 // app/(tabs)/scenarios.tsx
-import { useState, useEffect } from "react";
-import { StyleSheet, TextInput, Alert, Pressable } from "react-native";
+import React, { useState, useEffect, useCallback } from "react";
+import { 
+  StyleSheet, 
+  View, 
+  Alert, 
+  Pressable, 
+  ScrollView,
+  ActivityIndicator,
+  RefreshControl,
+  FlatList
+} from "react-native";
 import { router } from "expo-router";
-import { FlashList } from "@shopify/flash-list";
-import { ThemedView } from "../../components/ThemedView";
-import { ThemedText } from "../../components/ThemedText";
-import { Collapsible } from "../../components/Collapsible";
-import { useAppStore } from "../../hooks/useAppStore";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useAppStore } from "@/hooks/useAppStore";
 import { Scenario, Session, ChatMessage } from '@/types';
 import { generateId } from "@/lib/utils/ids";
 import { StorageService } from "@/lib/services/storage";
+import { useTheme } from "@/lib/theme/theme";
+import { Heading1, Heading2, Heading3, Body1, Body2, Caption } from "@/components/ui/Typography";
+import { Card, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { SearchInput } from "@/components/ui/Input";
+import { Feather } from '@expo/vector-icons';
+import Animated, { 
+  FadeInDown, 
+  FadeInRight,
+  Layout
+} from 'react-native-reanimated';
+
+// Helper components
+const DifficultyBadge = ({ level }: { level: 'beginner' | 'intermediate' | 'advanced' }) => {
+  const theme = useTheme();
+  
+  const colors = {
+    beginner: {
+      bg: theme.colors.success.light,
+      text: theme.colors.success.dark
+    },
+    intermediate: {
+      bg: theme.colors.warning.light,
+      text: theme.colors.warning.dark
+    },
+    advanced: {
+      bg: theme.colors.error.light,
+      text: theme.colors.error.dark
+    }
+  };
+  
+  const selectedColor = colors[level];
+  
+  return (
+    <View 
+      style={[
+        styles.difficultyBadge, 
+        { backgroundColor: selectedColor.bg }
+      ]}
+    >
+      <Caption color={selectedColor.text} weight="semibold">
+        {level.charAt(0).toUpperCase() + level.slice(1)}
+      </Caption>
+    </View>
+  );
+};
+
+// Category selector for scenario filtering
+const CategorySelector = ({ 
+  selectedCategory, 
+  onSelectCategory 
+}: { 
+  selectedCategory: string; 
+  onSelectCategory: (category: string) => void;
+}) => {
+  const theme = useTheme();
+  const categories = ['All', 'Shopping', 'Dining', 'Travel', 'Business', 'Casual'];
+  
+  return (
+    <ScrollView 
+      horizontal 
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.categoryList}
+    >
+      {categories.map((category, index) => {
+        const isSelected = selectedCategory === category.toLowerCase();
+        return (
+          <Pressable
+            key={category}
+            style={[
+              styles.categoryChip,
+              isSelected && { 
+                backgroundColor: theme.colors.primary.main 
+              }
+            ]}
+            onPress={() => onSelectCategory(
+              category === 'All' ? '' : category.toLowerCase()
+            )}
+          >
+            <Body2 
+              color={isSelected ? theme.colors.primary.contrast : theme.colors.text.primary}
+              weight={isSelected ? "semibold" : "regular"}
+            >
+              {category}
+            </Body2>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+};
 
 export default function ScenariosScreen() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState('');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const theme = useTheme();
   
   const {
     scenarios,
@@ -27,29 +127,30 @@ export default function ScenariosScreen() {
 
   // Load scenarios
   useEffect(() => {
-    const initialize = async () => {
-      setLoading(true);
-      try {
-        await loadScenarios();
-      } catch (error) {
-        console.error('Error initializing scenarios screen:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    initialize();
-  }, [loadScenarios, user?.id]);
+    loadInitialData();
+  }, [user?.id]);
 
-  const clearStorage = async () => {
+  const loadInitialData = async () => {
+    setLoading(true);
     try {
-      await StorageService.clearAll();
-      Alert.alert('Success', 'Storage cleared');
+      await loadScenarios();
     } catch (error) {
-      console.error('Error clearing storage:', error);
-      Alert.alert('Error', 'Failed to clear storage');
+      console.error('Error initializing scenarios screen:', error);
+    } finally {
+      setLoading(false);
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadScenarios();
+    } catch (error) {
+      console.error('Error refreshing scenarios:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadScenarios]);
 
   const handleScenarioPress = async (scenario: Scenario) => {
     console.log('Pressing scenario:', scenario);
@@ -133,253 +234,322 @@ export default function ScenariosScreen() {
     router.push("/create-scenario");
   };
 
+  const renderScenarioItem = ({ item, index }: { item: Scenario; index: number }) => {
+    return (
+      <Animated.View
+        entering={FadeInDown.delay(index * 100).springify()}
+        layout={Layout.springify()}
+      >
+        <Card
+          variant="elevated"
+          style={styles.scenarioCard}
+          onPress={() => handleScenarioPress(item)}
+        >
+          <CardContent>
+            <View style={styles.cardHeader}>
+              <View style={styles.categoryBadgeContainer}>
+                <View style={[
+                  styles.categoryBadge,
+                  { backgroundColor: getCategoryColor(item.category) }
+                ]}>
+                  <Caption color="#fff" weight="semibold" style={styles.categoryText}>
+                    {item.category}
+                  </Caption>
+                </View>
+                <DifficultyBadge level={item.difficulty} />
+              </View>
+              <View style={styles.languageBadge}>
+                <Feather name="globe" size={12} color={theme.colors.primary.main} />
+                <Caption 
+                  style={styles.languageText}
+                  color={theme.colors.primary.main}
+                >
+                  {item.target_language.name}
+                </Caption>
+              </View>
+            </View>
+            
+            <Heading3 style={styles.scenarioTitle}>
+              {item.title}
+            </Heading3>
+            
+            <Body2 
+              style={styles.scenarioDescription}
+              numberOfLines={2}
+              color={theme.colors.text.secondary}
+            >
+              {item.description}
+            </Body2>
+            
+            <View style={styles.personaContainer}>
+              <View style={styles.personaAvatarContainer}>
+                <Feather name="user" size={16} color="#fff" />
+              </View>
+              <View style={styles.personaInfo}>
+                <Body2 weight="semibold">{item.persona.name}</Body2>
+                <Caption>{item.persona.role}</Caption>
+              </View>
+            </View>
+            
+            <Button
+              variant="primary"
+              size="small"
+              style={styles.startButton}
+            >
+              Start Conversation
+            </Button>
+          </CardContent>
+        </Card>
+      </Animated.View>
+    );
+  };
+
+  const renderEmptyState = () => {
+    if (loading) {
+      return (
+        <View style={styles.emptyStateContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary.main} />
+          <Body1 style={styles.emptyText}>Loading scenarios...</Body1>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.emptyStateContainer}>
+        <Feather 
+          name={searchQuery ? "search" : "book-open"} 
+          size={50} 
+          color={theme.colors.text.hint}
+          style={styles.emptyIcon}
+        />
+        <Body1 style={styles.emptyText}>
+          {searchQuery
+            ? "No scenarios match your search"
+            : "No scenarios available. Create one to get started!"}
+        </Body1>
+        <Button
+          variant="primary"
+          onPress={handleCreateScenario}
+          style={styles.createButton}
+        >
+          Create New Scenario
+        </Button>
+      </View>
+    );
+  };
+
+  // Filter scenarios based on search and category
   const filteredScenarios = scenarios.filter(
-    (scenario) =>
-      scenario.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      scenario.description.toLowerCase().includes(searchQuery.toLowerCase())
+    (scenario) => {
+      const matchesSearch = 
+        scenario.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        scenario.description.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesCategory = selectedCategory 
+        ? scenario.category === selectedCategory 
+        : true;
+      
+      return matchesSearch && matchesCategory;
+    }
   );
 
-  const renderScenarioCard = ({ item: scenario }: { item: Scenario }) => (
-    <Pressable onPress={() => handleScenarioPress(scenario)}>
-      <ThemedView style={styles.scenarioCard}>
-        <ThemedView style={styles.categoryBadge}>
-          <ThemedText style={styles.categoryText}>
-            {scenario.category}
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText style={styles.scenarioTitle}>{scenario.title}</ThemedText>
-        <ThemedText style={styles.scenarioDescription}>
-          {scenario.description}
-        </ThemedText>
-
-        <Collapsible title="Scenario Details">
-          <ThemedView style={styles.detailsContainer}>
-            <ThemedView style={styles.personaContainer}>
-              <ThemedView style={styles.personaInfo}>
-                <ThemedText style={styles.personaName}>
-                  {scenario.persona.name}
-                </ThemedText>
-                <ThemedText style={styles.personaRole}>
-                  ({scenario.persona.role})
-                </ThemedText>
-              </ThemedView>
-
-              <ThemedView style={styles.languageStyleBadge}>
-                <ThemedText style={styles.languageStyleText}>
-                  {scenario.persona.languageStyle}
-                </ThemedText>
-              </ThemedView>
-            </ThemedView>
-
-            <ThemedText style={styles.detailText}>
-              Personality: {scenario.persona.personality}
-            </ThemedText>
-
-            <ThemedText style={styles.difficultyText}>
-              Level: {scenario.difficulty}
-            </ThemedText>
-
-            {scenario.target_language && (
-              <ThemedText style={styles.detailText}>
-                Language: {scenario.target_language.name}
-              </ThemedText>
-            )}
-          </ThemedView>
-        </Collapsible>
-      </ThemedView>
-    </Pressable>
-  );
+  // Get category color
+  const getCategoryColor = (category: string) => {
+    const categoryColors: Record<string, string> = {
+      'shopping': theme.colors.success.main,
+      'dining': theme.colors.warning.main,
+      'travel': theme.colors.info.main,
+      'business': theme.colors.primary.dark,
+      'casual': theme.colors.secondary.main,
+    };
+    
+    return categoryColors[category] || theme.colors.primary.main;
+  };
 
   return (
-    <ThemedView useSafeArea style={styles.container}>
-      <ThemedView style={styles.header}>
-        <ThemedText style={styles.headerTitle}>Language Scenarios</ThemedText>
-        <ThemedText style={styles.headerSubtitle}>
-          Choose a scenario to start practicing or create your own
-        </ThemedText>
-      </ThemedView>
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <View style={styles.contentContainer}>
+        <View style={styles.header}>
+          <Heading1 style={styles.headerTitle}>Language Scenarios</Heading1>
+          <Body1 style={styles.headerSubtitle}>
+            Choose a scenario to practice your conversation skills
+          </Body1>
+        </View>
   
-      <ThemedView style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search scenarios..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholderTextColor="#666"
+        <View style={styles.searchContainer}>
+          <SearchInput
+            placeholder="Search scenarios..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            containerStyle={styles.searchInputContainer}
+          />
+          <Button
+            variant="primary"
+            icon="plus"
+            onPress={handleCreateScenario}
+            style={styles.createScenarioButton}
+          >
+            Create
+          </Button>
+        </View>
+        
+        <CategorySelector 
+          selectedCategory={selectedCategory || 'All'} 
+          onSelectCategory={setSelectedCategory}
         />
-        <Pressable onPress={handleCreateScenario} style={styles.createButton}>
-          <ThemedText style={styles.createButtonText}>Create New</ThemedText>
-        </Pressable>
-      </ThemedView>
   
-      <FlashList
-        data={filteredScenarios}
-        renderItem={renderScenarioCard}
-        estimatedItemSize={200}
-        contentContainerStyle={{ padding: 16 }}
-        ListEmptyComponent={
-          <ThemedView style={styles.emptyState}>
-            <ThemedText style={styles.emptyStateText}>
-              {searchQuery
-                ? "No scenarios match your search"
-                : "No scenarios available. Create one to get started!"}
-            </ThemedText>
-          </ThemedView>
-        }
-      />
-    </ThemedView>
+        <FlatList
+          data={filteredScenarios}
+          renderItem={renderScenarioItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={renderEmptyState}
+          initialNumToRender={6}
+          maxToRenderPerBatch={8}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[theme.colors.primary.main]}
+              tintColor={theme.colors.primary.main}
+            />
+          }
+        />
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#fff',
+  },
+  contentContainer: {
+    flex: 1,
   },
   header: {
-    padding: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#ccc",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   headerSubtitle: {
-    fontSize: 16,
     opacity: 0.7,
   },
   searchContainer: {
-    padding: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
   },
-  searchInput: {
+  searchInputContainer: {
     flex: 1,
-    height: 40,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    backgroundColor: "#f5f5f5",
+    marginBottom: 0,
   },
-  createButton: {
-    backgroundColor: "#007AFF",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  createButtonText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
-  listContainer: {
-    padding: 16,
+  createScenarioButton: {
+    minWidth: 100,
   },
   scenarioCard: {
-    padding: 16,
-    borderRadius: 12,
     marginBottom: 16,
-    backgroundColor: "#f8f9fa",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
   },
-  scenarioTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 8,
-    color: "#1a1a1a",
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
   },
-  scenarioDescription: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 16,
-    lineHeight: 20,
-  },
-  detailsContainer: {
-    backgroundColor: "#fff",
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  detailText: {
-    fontSize: 14,
-    marginBottom: 6,
-    color: "#4a4a4a",
-  },
-  emptyState: {
-    padding: 32,
-    alignItems: "center",
-  },
-  emptyStateText: {
-    fontSize: 16,
-    opacity: 0.7,
-    textAlign: "center",
-    color: "#666",
+  categoryBadgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   categoryBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    backgroundColor: "#e9ecef",
-    alignSelf: "flex-start",
-    marginBottom: 8,
   },
   categoryText: {
-    fontSize: 12,
-    color: "#495057",
-    textTransform: "capitalize",
+    textTransform: 'capitalize',
   },
-  difficultyIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
+  difficultyBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
   },
-  difficultyText: {
-    fontSize: 12,
-    color: "#6c757d",
-    marginLeft: 4,
-    textTransform: "capitalize",
+  languageBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  languageText: {
+    marginLeft: 2,
+  },
+  scenarioTitle: {
+    marginBottom: 8,
+  },
+  scenarioDescription: {
+    marginBottom: 16,
+    height: 40, // Fixed height for 2 lines
   },
   personaContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#dee2e6",
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  personaAvatarContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#4A6FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
   },
   personaInfo: {
-    flexDirection: "row",
-    alignItems: "center",
+    flex: 1,
   },
-  personaName: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#212529",
+  startButton: {
+    alignSelf: 'flex-start',
   },
-  personaRole: {
-    fontSize: 12,
-    color: "#6c757d",
-    marginLeft: 4,
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
   },
-  languageStyleBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    backgroundColor: "#e2e3e5",
+  emptyIcon: {
+    marginBottom: 16,
   },
-  languageStyleText: {
-    fontSize: 12,
-    color: "#383d41",
-    textTransform: "capitalize",
+  emptyText: {
+    textAlign: 'center',
+    marginBottom: 24,
+    opacity: 0.7,
+  },
+  createButton: {
+    minWidth: 200,
+  },
+  listContent: {
+    padding: 16,
+    paddingTop: 8,
+    flexGrow: 1,
+  },
+  categoryList: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  categoryChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    backgroundColor: '#F2F2F7',
+  },
+  selectedChip: {
+    backgroundColor: '#4A6FFF',
   },
 });
