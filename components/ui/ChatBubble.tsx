@@ -1,6 +1,6 @@
 // components/ui/ChatBubble.tsx
 import React, { memo, useCallback, useState, useEffect } from "react";
-import { StyleSheet, View, Pressable, Alert, TouchableOpacity, Animated } from "react-native";
+import { StyleSheet, View, Pressable, Alert, TouchableOpacity } from "react-native";
 import { ChatMessage } from "@/types";
 import { Body1, Body2, Caption } from "./Typography";
 import { useTheme } from "@/lib/theme/theme";
@@ -11,6 +11,11 @@ import { SpeechService } from "@/lib/services/speech";
 import { Feather } from '@expo/vector-icons';
 import { generateId } from '@/lib/utils/ids';
 import { StorageService } from '@/lib/services/storage';
+import Animated, { 
+  useAnimatedStyle, 
+  useSharedValue, 
+  withTiming 
+} from "react-native-reanimated";
 
 export const ChatBubble = memo(function ChatBubble({
   message,
@@ -28,9 +33,11 @@ export const ChatBubble = memo(function ChatBubble({
 
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isTranslationVisible, setIsTranslationVisible] = useState(false);
-  const [animationValue] = useState(new Animated.Value(0));
+  const translationOpacity = useSharedValue(0);
+  const translationHeight = useSharedValue(0);
   const isUser = message.sender === "user";
 
+  // Cleanup speech when component unmounts
   useEffect(() => {
     return () => {
       if (isSpeaking) {
@@ -39,22 +46,18 @@ export const ChatBubble = memo(function ChatBubble({
     };
   }, [isSpeaking]);
 
+  // Handle translation visibility change
   useEffect(() => {
     if (isTranslationVisible) {
-      Animated.timing(animationValue, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
+      translationOpacity.value = withTiming(1, { duration: 300 });
+      translationHeight.value = withTiming(40, { duration: 300 });
     } else {
-      Animated.timing(animationValue, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
+      translationOpacity.value = withTiming(0, { duration: 200 });
+      translationHeight.value = withTiming(0, { duration: 200 });
     }
-  }, [isTranslationVisible, animationValue]);
+  }, [isTranslationVisible]);
 
+  // Speech handling
   const handleSpeak = useCallback(async () => {
     if (isSpeaking) {
       await handleStop();
@@ -92,6 +95,7 @@ export const ChatBubble = memo(function ChatBubble({
     setIsTranslationVisible(!isTranslationVisible);
   };
 
+  // Message editing functionality
   const handleEdit = useCallback(
     async (editType: "original" | "translation") => {
       if (!target_language || !currentScenario) {
@@ -119,7 +123,7 @@ export const ChatBubble = memo(function ChatBubble({
                 const messageIndex = state.messages.findIndex(m => m.id === message.id);
                 if (messageIndex === -1) return;
   
-                let updatedMessage: ChatMessage; // Add explicit type annotation
+                let updatedMessage: ChatMessage;
   
                 if (message.sender === 'assistant') {
                   if (editType === 'translation') {
@@ -131,11 +135,11 @@ export const ChatBubble = memo(function ChatBubble({
                     updatedMessage = {
                       ...message,
                       content: {
-                        original: newOriginal,  // New translated target language
-                        translated: newText,    // User's edited English
+                        original: newOriginal,
+                        translated: newText,
                       },
                       isEdited: true,
-                      sender: message.sender as "assistant", // Force the correct type
+                      sender: message.sender as "assistant",
                     };
                   } else {
                     // If editing target language of AI message, translate to English
@@ -146,15 +150,15 @@ export const ChatBubble = memo(function ChatBubble({
                     updatedMessage = {
                       ...message,
                       content: {
-                        original: newText,        // User's edited target language
-                        translated: newTranslation, // New English translation
+                        original: newText,
+                        translated: newTranslation,
                       },
                       isEdited: true,
-                      sender: message.sender as "assistant", // Force the correct type
+                      sender: message.sender as "assistant",
                     };
                   }
                 } else {
-                  // Original user message handling
+                  // User message handling
                   const translationResult = await OpenAIService.translateText(
                     newText,
                     editType === "original" ? target_language.name : "English"
@@ -167,7 +171,7 @@ export const ChatBubble = memo(function ChatBubble({
                       translated: editType === "original" ? translationResult : newText,
                     },
                     isEdited: true,
-                    sender: message.sender as "user", // Force the correct type
+                    sender: message.sender as "user",
                   };
                 }
   
@@ -192,7 +196,7 @@ export const ChatBubble = memo(function ChatBubble({
                   setCurrentSession(updatedSession);
                 }
   
-                // Only generate new AI response for user message edits
+                // Generate new AI response for edited user messages
                 if (message.sender === 'user') {
                   const aiResponse = await OpenAIService.generateChatCompletion(
                     newMessageList,
@@ -205,25 +209,25 @@ export const ChatBubble = memo(function ChatBubble({
                     'English'
                   );
   
-                  const newAiMessage: ChatMessage = { // Add explicit type annotation
+                  const newAiMessage: ChatMessage = {
                     id: generateId(),
                     content: {
                       original: aiResponse,
                       translated: translatedResponse
                     },
-                    sender: "assistant", // Use string literal directly
+                    sender: "assistant",
                     timestamp: Date.now(),
                     isEdited: false
                   };
   
-                  // Add AI response and update storage again
+                  // Add AI response and update storage
                   const finalMessageList = [...newMessageList, newAiMessage];
                   dispatch({ type: 'ADD_MESSAGE', payload: newAiMessage });
   
                   if (currentSession) {
                     const finalSession = {
                       ...currentSession,
-                      messages: finalMessageList as ChatMessage[], // Cast to the correct type
+                      messages: finalMessageList,
                       lastUpdated: Date.now(),
                     };
                     await StorageService.saveSession(finalSession);
@@ -261,6 +265,7 @@ export const ChatBubble = memo(function ChatBubble({
     ]);
   }, [handleEdit, isUser]);
 
+  // Styling
   const backgroundColor = isUser
     ? theme.colors.primary.main
     : theme.colors.background.paper;
@@ -268,15 +273,14 @@ export const ChatBubble = memo(function ChatBubble({
   const textColor = isUser
     ? theme.colors.primary.contrast
     : theme.colors.text.primary;
-  
-  const translationOpacity = animationValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
-  });
-  
-  const translationHeight = animationValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 30],
+
+  // Animated styles
+  const translationStyle = useAnimatedStyle(() => {
+    return {
+      opacity: translationOpacity.value,
+      maxHeight: translationHeight.value,
+      overflow: 'hidden',
+    };
   });
 
   return (
@@ -303,16 +307,7 @@ export const ChatBubble = memo(function ChatBubble({
             {message.content.original}
           </Body1>
           
-          <Animated.View
-            style={[
-              styles.translationContainer,
-              {
-                opacity: translationOpacity,
-                height: translationHeight,
-                overflow: 'hidden',
-              },
-            ]}
-          >
+          <Animated.View style={[styles.translationContainer, translationStyle]}>
             <Body2 
               style={styles.translatedText} 
               color={isUser ? theme.colors.primary.light : theme.colors.text.secondary}

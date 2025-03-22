@@ -30,120 +30,99 @@ export const ChatInput = memo(function ChatInput({
   const { state, dispatch } = useChatContext();
   const { currentScenario, currentSession, setCurrentSession } = useAppStore();
 
-  const handleSend = useCallback(async () => {
-    if (
-      !inputText.trim() ||
-      state.isLoading ||
-      !currentScenario ||
-      !sessionLanguage ||
-      disabled
-    ) {
-      return;
-    }
-
-    const trimmedText = inputText.trim();
-    setInputText("");
-    Keyboard.dismiss();
-
-    dispatch({ type: "SET_LOADING", payload: true });
-
+  // In the main ChatScreen component:
+const handleSend = useCallback(async (text: string) => {
+    if (!currentSession || !currentScenario || !text.trim() || state.isLoading) return;
+    
     try {
-      // Create initial user message with explicit type annotation
-      const userMessage: ChatMessage = {
-        id: generateId(),
+      // Create a new message
+      const newMessage = {
+        id: Date.now().toString(),
         content: {
-          original: trimmedText,
-          translated: "Translating...",
+          original: text,
+          translated: 'Translating...',
         },
-        sender: "user", // Use literal string "user"
+        sender: 'user' as const,
         timestamp: Date.now(),
         isEdited: false,
       };
-
-      dispatch({ type: "ADD_MESSAGE", payload: userMessage });
-
-      // First translate user message
+      
+      // Add to context and set loading state
+      dispatch({ type: 'ADD_MESSAGE', payload: newMessage });
+      dispatch({ type: 'SET_LOADING', payload: true });
+      
+      // Process the message - using import without dynamic import
+      const OpenAIService = require('@/lib/services/openai').OpenAIService;
+      
+      // Translate user message
       const translatedUserText = await OpenAIService.translateText(
-        trimmedText,
-        sessionLanguage.name
+        text,
+        currentSession.target_language.name
       );
-
+      
       // Update user message with translation
-      const updatedUserMessage: ChatMessage = {
-        ...userMessage,
+      const updatedUserMessage = {
+        ...newMessage,
         content: {
-          original: trimmedText,
+          original: text,
           translated: translatedUserText,
         },
       };
-
+      
       dispatch({
-        type: "UPDATE_MESSAGE",
+        type: 'UPDATE_MESSAGE',
         payload: {
-          id: userMessage.id,
+          id: newMessage.id,
           message: updatedUserMessage,
         },
       });
-
-      // Get AI response with updated messages
+      
+      // Get AI response
       const aiResponse = await OpenAIService.generateChatCompletion(
         [...state.messages, updatedUserMessage],
         currentScenario,
-        sessionLanguage.name
+        currentSession.target_language.name
       );
-
+      
       // Translate AI response to English
       const translatedAiResponse = await OpenAIService.translateText(
         aiResponse,
         "English"
       );
-
+      
       // Create and add AI message
-      const aiMessage: ChatMessage = {
-        id: generateId(),
+      const aiMessage = {
+        id: Date.now().toString() + '-ai',
         content: {
           original: aiResponse,
           translated: translatedAiResponse,
         },
-        sender: "assistant", // Use literal string "assistant"
+        sender: 'assistant' as const,
         timestamp: Date.now(),
         isEdited: false,
       };
-
-      dispatch({ type: "ADD_MESSAGE", payload: aiMessage });
-
+      
+      dispatch({ type: 'ADD_MESSAGE', payload: aiMessage });
+      
       // Update session
       if (currentSession) {
         const updatedSession = {
           ...currentSession,
-          messages: [...state.messages, updatedUserMessage, aiMessage] as ChatMessage[], // Use type assertion
+          messages: [...state.messages, updatedUserMessage, aiMessage],
           lastUpdated: Date.now(),
         };
-        // Log before saving
-        console.log("Messages after adding:", {
-          stateMessages: state.messages,
-          sessionMessages: updatedSession.messages,
-        });
-
+        
         await StorageService.saveSession(updatedSession);
         setCurrentSession(updatedSession);
       }
     } catch (error) {
-      console.error("Message error:", error);
-      Alert.alert("Error", "Failed to send message. Please try again.");
+      console.error('Error sending message:', error);
+      Alert.alert('Error', 'Failed to send message');
     } finally {
-      dispatch({ type: "SET_LOADING", payload: false });
+      // IMPORTANT: Always reset loading state
+      dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [
-    inputText,
-    state.messages,
-    currentScenario,
-    sessionLanguage,
-    currentSession,
-    dispatch,
-    setCurrentSession,
-    disabled,
-  ]);
+  }, [currentSession, currentScenario, state.messages, state.isLoading, dispatch, setCurrentSession]);
 
   return (
     <View style={styles.container}>

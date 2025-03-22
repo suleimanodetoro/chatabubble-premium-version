@@ -1,3 +1,4 @@
+// components/ui/Button.tsx
 import React, { ReactNode } from 'react';
 import { 
   Pressable, 
@@ -5,12 +6,38 @@ import {
   ViewStyle, 
   TextStyle, 
   ActivityIndicator,
-  StyleProp 
+  StyleProp,
+  Text 
 } from 'react-native';
 import { useTheme } from '@/lib/theme/theme';
-import { ButtonText } from './Typography';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+
+// Define ButtonText component directly here to avoid circular imports
+const ButtonText = ({ 
+  children, 
+  color, 
+  style 
+}: { 
+  children: ReactNode; 
+  color: string; 
+  style?: StyleProp<TextStyle>; 
+}) => {
+  return (
+    <Text 
+      style={[
+        { 
+          fontSize: 16, 
+          fontWeight: '600',
+          color
+        }, 
+        style
+      ]}
+    >
+      {children}
+    </Text>
+  );
+};
 
 type ButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'icon';
 type ButtonSize = 'small' | 'medium' | 'large';
