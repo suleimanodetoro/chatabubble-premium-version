@@ -39,6 +39,7 @@ export default function HomeScreen() {
   const [metrics, setMetrics] = useState<UserMetrics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const theme = useTheme();
+  const { setCurrentScenario, setCurrentSession, saveSession } = useAppStore();
 
   useEffect(() => {
     loadMetrics();
@@ -58,6 +59,34 @@ export default function HomeScreen() {
       console.error("Error loading metrics:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Helper function to handle session continuation
+  const handleContinueSession = async (session) => {
+    try {
+      // Ensure we have both session and scenario data
+      if (!session || !session.scenario) {
+        console.error("Invalid session or missing scenario data:", session);
+        return;
+      }
+      
+      console.log("Continuing session:", session.id);
+      
+      // Set the current scenario and session in the app store
+      setCurrentScenario(session.scenario);
+      setCurrentSession(session);
+      
+      // Save the session first to ensure it's available
+      await saveSession(session);
+      
+      // Navigate to the chat screen with the session ID
+      router.push({
+        pathname: "/(chat)/[id]",
+        params: { id: session.id },
+      });
+    } catch (error) {
+      console.error("Error continuing session:", error);
     }
   };
 
@@ -121,7 +150,7 @@ export default function HomeScreen() {
                 size="medium"
                 icon="play"
                 style={styles.continueButton}
-                onPress={() => router.push(`/(chat)/${recentActivity.id}`)}
+                onPress={() => handleContinueSession(recentActivity)}
               >
                 Continue Learning
               </Button>
@@ -248,7 +277,7 @@ export default function HomeScreen() {
                 key={session.id}
                 variant="elevated" 
                 style={styles.sessionCard}
-                onPress={() => router.push(`/(chat)/${session.id}`)}
+                onPress={() => handleContinueSession(session)}
               >
                 <CardContent>
                   <View style={styles.sessionCardHeader}>
@@ -292,6 +321,7 @@ export default function HomeScreen() {
                     style={styles.continueSessionButton}
                     icon="arrow-right"
                     iconPosition="right"
+                    onPress={() => handleContinueSession(session)}
                   >
                     Continue
                   </Button>

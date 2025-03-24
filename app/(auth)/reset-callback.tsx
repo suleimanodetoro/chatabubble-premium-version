@@ -1,4 +1,4 @@
-// app/reset-callback.tsx - Root level file for handling reset callbacks
+// app/(auth)/reset-callback.tsx
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
@@ -58,6 +58,10 @@ export default function ResetCallbackScreen() {
         if (accessToken) {
           if (mounted) setMessage('Validating your reset token...');
           
+          // Mark this as a password reset flow BEFORE setting the session
+          // This is critical to prevent redirection to tabs
+          await AsyncStorage.setItem('@is_password_reset', 'true');
+          
           const { error: sessionError } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken || ''
@@ -80,7 +84,7 @@ export default function ResetCallbackScreen() {
           }
           
           // Valid session established
-          console.log('Session established successfully');
+          console.log('Session established successfully for password reset');
           
           if (mounted) {
             setMessage('Redirecting to password reset screen...');
@@ -91,7 +95,8 @@ export default function ResetCallbackScreen() {
                 params: {
                   access_token: accessToken,
                   refresh_token: refreshToken || '',
-                  type: type || 'recovery'
+                  type: type || 'recovery',
+                  force_reset: 'true'
                 }
               });
             }, 1000);

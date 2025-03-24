@@ -3,12 +3,46 @@ import * as Crypto from "expo-crypto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ChatMessage } from "@/types";
 import { StorageService } from "./storage";
+import { supabase } from "../supabase/client";
 
 // Remove the base-64 import as we'll implement our own Unicode-safe methods
 
 export class EncryptionService {
   private static readonly KEY_PREFIX = "@encryption_key_";
   private static readonly AUTH_TYPE_KEY = "@auth_type_";
+
+  /**
+   * Automatically attempts to recover or regenerate an encryption key
+   * when decryption fails. Called by the system, not by users directly.
+   */
+  static async attemptKeyRecovery(userId: string, email: string): Promise<boolean> {
+    try {
+      console.log("Attempting encryption key recovery for user:", userId);
+      
+      // Check if this is a social auth user
+      const { data } = await supabase.auth.getUser();
+      const isSocialAuth = data?.user?.app_metadata?.provider && 
+                         data.user.app_metadata.provider !== 'email';
+      
+      const authType = isSocialAuth ? 'social' : 'password';
+      console.log("Detected auth type for recovery:", authType);
+      
+      // Store the determined auth type
+      await AsyncStorage.setItem(`${this.AUTH_TYPE_KEY}${userId}`, authType);
+      
+      // Generate a new encryption key
+      await this.generateUserKey(userId, email, authType);
+      await AsyncStorage.setItem(`@key_status:${userId}`, 'recovered');
+      
+      // Log telemetry for monitoring
+      console.log("Encryption key recovery successful");
+      
+      return true;
+    } catch (error) {
+      console.error("Encryption key recovery failed:", error);
+      return false;
+    }
+  }
 
   static async generateUserKey(
     userId: string,
@@ -404,14 +438,32 @@ export class EncryptionService {
     }
   }
 
+  /**
+   * Enhanced encrypt chat message with automatic recovery if key is missing
+   */
   static async encryptChatMessage(
     message: ChatMessage,
     userId: string
   ): Promise<ChatMessage> {
-    const key = await this.getEncryptionKey(userId);
+    let key = await this.getEncryptionKey(userId);
+    
     if (!key) {
       console.log("No encryption key found for user:", userId);
-      return message;
+      
+      // Try to get user information for key recovery
+      const { data } = await supabase.auth.getUser();
+      if (data?.user?.email) {
+        // Attempt key recovery
+        const recoverySuccess = await this.attemptKeyRecovery(userId, data.user.email);
+        if (recoverySuccess) {
+          key = await this.getEncryptionKey(userId);
+        }
+      }
+      
+      // If recovery failed, return original message
+      if (!key) {
+        return message;
+      }
     }
 
     try {
@@ -428,13 +480,44 @@ export class EncryptionService {
     }
   }
 
+  /**
+   * Enhanced decrypt chat message with auto-recovery attempt
+   */
   static async decryptChatMessage(
     message: ChatMessage,
     userId: string
   ): Promise<ChatMessage> {
     const key = await this.getEncryptionKey(userId);
+    
     if (!key) {
       console.log("No decryption key found for user:", userId);
+      
+      // Get user information for recovery attempt
+      const { data } = await supabase.auth.getUser();
+      if (data?.user?.email) {
+        // Try to recover the encryption key
+        const recoverySuccess = await this.attemptKeyRecovery(userId, data.user.email);
+        
+        if (recoverySuccess) {
+          // Try decryption again with the recovered key
+          const recoveredKey = await this.getEncryptionKey(userId);
+          if (recoveredKey) {
+            try {
+              return {
+                ...message,
+                content: {
+                  original: await this.decrypt(message.content.original, recoveredKey),
+                  translated: await this.decrypt(message.content.translated, recoveredKey),
+                },
+              };
+            } catch (decryptError) {
+              console.error("Decryption failed after recovery:", decryptError);
+            }
+          }
+        }
+      }
+      
+      // If recovery failed or user email not available, return original message
       return message;
     }
 

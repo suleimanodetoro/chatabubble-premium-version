@@ -1,6 +1,6 @@
 // app/(auth)/reset-password.tsx
 import { useState, useEffect } from 'react';
-import { StyleSheet, TextInput, Pressable, Alert, ActivityIndicator, View } from 'react-native';
+import { StyleSheet, TextInput, Pressable, Alert, ActivityIndicator, View, BackHandler } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -16,15 +16,38 @@ export default function ResetPasswordScreen() {
   const [validated, setValidated] = useState(false);
   const [validating, setValidating] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isForceReset, setIsForceReset] = useState(false);
   const router = useRouter();
   const params = useLocalSearchParams();
   
   console.log("Reset password screen mounted with params:", params);
   
+  // Handle back button to prevent skipping password reset
+  useEffect(() => {
+    if (params.force_reset === 'true' || params.type === 'recovery') {
+      setIsForceReset(true);
+      
+      // Prevent back button from skipping password reset
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        Alert.alert(
+          'Password Reset Required',
+          'You must set a new password to continue.',
+          [{ text: 'OK' }]
+        );
+        return true; // Prevent default back behavior
+      });
+      
+      return () => backHandler.remove();
+    }
+  }, [params]);
+  
   useEffect(() => {
     async function validateResetToken() {
       try {
         console.log("Validating reset token...");
+        
+        // Ensure we're still in password reset mode
+        await AsyncStorage.setItem('@is_password_reset', 'true');
         
         // Check for error parameters
         if (params.error) {
@@ -35,6 +58,12 @@ export default function ResetPasswordScreen() {
         const { data: sessionData } = await supabase.auth.getSession();
         if (sessionData?.session) {
           console.log("Existing session found, token is valid");
+          
+          // Store a flag indicating this is a password reset flow
+          if (params.type === 'recovery') {
+            await AsyncStorage.setItem('@is_password_reset', 'true');
+          }
+          
           setValidated(true);
           setValidating(false);
           return;
@@ -61,6 +90,9 @@ export default function ResetPasswordScreen() {
           console.error("Error validating token:", error);
           throw error;
         }
+        
+        // Mark this as a password reset session
+        await AsyncStorage.setItem('@is_password_reset', 'true');
         
         console.log("Token validated successfully");
         setValidated(true);
@@ -112,20 +144,28 @@ export default function ResetPasswordScreen() {
       
       console.log("User found, updating password for:", user.id);
       
-      // Use our enhanced updatePassword method that handles re-encryption
-      // For simplicity, we'll just call the Supabase method directly here
-      const { error } = await supabase.auth.updateUser({
-        password: password
-      });
+      // Use AuthService instead of direct Supabase call - this is the key fix
+      const { success, error: updateError } = await AuthService.updatePassword(
+        user.id,
+        password
+      );
       
-      if (error) throw error;
+      if (!success || updateError) {
+        throw new Error(updateError || 'Failed to update password');
+      }
       
       console.log("Password updated successfully");
       
+      // Clear the password reset flag - CRITICAL for proper flow
+      await AsyncStorage.removeItem('@is_password_reset');
+      
+      // Sign out for security after password reset
+      await supabase.auth.signOut();
+      
       Alert.alert(
         'Success',
-        'Your password has been reset successfully',
-        [{ text: 'OK', onPress: () => router.replace('/login') }]
+        'Your password has been reset successfully. Please sign in with your new password.',
+        [{ text: 'OK', onPress: () => router.replace('/(auth)/login') }]
       );
     } catch (error) {
       console.error('Password update error:', error);
@@ -133,6 +173,20 @@ export default function ResetPasswordScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Custom back button handler to prevent skipping password reset
+  const handleBackPress = () => {
+    if (isForceReset) {
+      Alert.alert(
+        'Password Reset Required',
+        'You must set a new password to continue.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
+    router.replace('/(auth)/login');
   };
 
   if (validating) {
@@ -156,7 +210,7 @@ export default function ResetPasswordScreen() {
         </ThemedText>
         <Pressable
           style={styles.button}
-          onPress={() => router.replace('/forgot-password')}
+          onPress={() => router.replace('/(auth)/forgot-password')}
         >
           <ThemedText style={styles.buttonText}>
             Request New Reset Link
@@ -169,7 +223,7 @@ export default function ResetPasswordScreen() {
   return (
     <ThemedView style={styles.container}>
       <View style={styles.header}>
-        <BackButton onPress={() => router.replace('/login')} />
+        <BackButton onPress={handleBackPress} />
       </View>
       
       <ThemedText style={styles.title}>Set New Password</ThemedText>

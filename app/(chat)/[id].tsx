@@ -431,7 +431,7 @@ export default function ChatScreen() {
       !isUserScrollingRef.current
     ) {
       // Use a longer delay for better reliability
-      scrollToBottom(300, true);
+      scrollToBottom(500, true);
     }
   }, [state.messages.length, scrollToBottom]);
 

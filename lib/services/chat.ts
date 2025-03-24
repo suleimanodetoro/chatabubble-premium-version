@@ -1,9 +1,9 @@
-// @/lib/services/chat.ts 
+// @/lib/services/chat.ts
 
 import { supabase } from '../supabase/client';
 import { Session, ChatMessage } from '@/types';
 import { EncryptionService } from './encryption';
-
+import NetInfo from '@react-native-community/netinfo';
 
 interface SessionMetrics {
   messageCount: number;
@@ -15,8 +15,25 @@ interface SessionMetrics {
 }
 
 export class ChatService {
+  // Helper to check network connection
+  private static async isNetworkConnected(): Promise<boolean> {
+    try {
+      const state = await NetInfo.fetch();
+      return state.isConnected === true;
+    } catch (error) {
+      console.log('Error checking network:', error);
+      return false;
+    }
+  }
+
   static async createOrUpdateSession(session: Session, messages: ChatMessage[]) {
     try {
+      // Check network connection first
+      if (!(await this.isNetworkConnected())) {
+        console.log('Network unavailable, skipping server update');
+        return null; // Return null instead of throwing when offline
+      }
+
       console.log('Starting session save:', {
         sessionId: session.id,
         userId: session.userId,
@@ -48,7 +65,12 @@ export class ChatService {
   
       const metrics = this.calculateMetrics(session, messages);
       
-      const { data, error } = await supabase
+      // Add timeout protection to prevent hanging on network issues
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Network request timeout')), 5000);
+      });
+      
+      const savePromise = supabase
         .from('chat_sessions')
         .upsert({
           id: session.id,
@@ -64,16 +86,34 @@ export class ChatService {
         .select()
         .single();
   
-      if (error) throw error;
+      // Race the promises to handle timeouts
+      const { data, error } = await Promise.race([savePromise, timeoutPromise])
+        .catch(error => {
+          console.log('Network error or timeout:', error);
+          return { data: null, error };
+        });
+      
+      if (error) {
+        console.error('Supabase error:', error);
+        return null; // Don't throw, just return null
+      }
+      
       return data;
     } catch (error) {
       console.error('Error saving chat session:', error);
-      throw error;
+      // Don't throw, return null to allow app to continue functioning
+      return null;
     }
   }
 
   static async completeSession(sessionId: string, messages: ChatMessage[]) {
     try {
+      // Check network connection first
+      if (!(await this.isNetworkConnected())) {
+        console.log('Network unavailable, skipping server completion');
+        return null; // Return null instead of throwing when offline
+      }
+      
       console.log('ChatService - Completing session:', {
         sessionId,
         messageCount: messages.length
@@ -84,7 +124,12 @@ export class ChatService {
         timestamp: new Date(Math.floor(msg.timestamp / 1000) * 1000).toISOString()
       }));
 
-      const { data, error } = await supabase
+      // Add timeout protection
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Network request timeout')), 5000);
+      });
+      
+      const updatePromise = supabase
         .from('chat_sessions')
         .update({
           messages: formattedMessages,
@@ -95,11 +140,23 @@ export class ChatService {
         .select()
         .single();
 
-      if (error) throw error;
+      // Race the promises to handle timeouts
+      const { data, error } = await Promise.race([updatePromise, timeoutPromise])
+        .catch(error => {
+          console.log('Network error or timeout:', error);
+          return { data: null, error };
+        });
+      
+      if (error) {
+        console.error('Supabase error:', error);
+        return null; // Don't throw, just return null
+      }
+      
       return data;
     } catch (error) {
       console.error('ChatService - Error completing session:', error);
-      throw error;
+      // Don't throw, return null to allow app to continue functioning
+      return null;
     }
   }
 
@@ -109,6 +166,12 @@ export class ChatService {
    */
   static async anonymizeSession(sessionId: string): Promise<boolean> {
     try {
+      // Check network connection first
+      if (!(await this.isNetworkConnected())) {
+        console.log('Network unavailable, skipping session anonymization');
+        return false;
+      }
+      
       console.log('Anonymizing session:', sessionId);
       
       // First, get the session to check if we need to modify messages
@@ -139,8 +202,12 @@ export class ChatService {
         }));
       }
       
-      // Update the session with anonymized data
-      const { error: updateError } = await supabase
+      // Add timeout protection
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Network request timeout')), 5000);
+      });
+      
+      const updatePromise = supabase
         .from('chat_sessions')
         .update({
           user_id: 'deleted', // We use a placeholder instead of null to maintain referential integrity
@@ -155,6 +222,13 @@ export class ChatService {
           updated_at: new Date().toISOString()
         })
         .eq('id', sessionId);
+      
+      // Race the promises to handle timeouts
+      const { error: updateError } = await Promise.race([updatePromise, timeoutPromise])
+        .catch(error => {
+          console.log('Network error or timeout:', error);
+          return { error };
+        });
         
       if (updateError) {
         console.error('Error anonymizing session:', updateError);
@@ -170,7 +244,18 @@ export class ChatService {
 
   static async getSessionHistory(userId: string) {
     try {
-      const { data, error } = await supabase
+      // Check network connection first
+      if (!(await this.isNetworkConnected())) {
+        console.log('Network unavailable, returning empty session history');
+        return []; // Return empty array instead of throwing when offline
+      }
+      
+      // Add timeout protection
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Network request timeout')), 5000);
+      });
+      
+      const fetchPromise = supabase
         .from('chat_sessions')
         .select(`
           *,
@@ -179,11 +264,22 @@ export class ChatService {
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      return data;
+      // Race the promises to handle timeouts
+      const { data, error } = await Promise.race([fetchPromise, timeoutPromise])
+        .catch(error => {
+          console.log('Network error or timeout:', error);
+          return { data: [], error };
+        });
+      
+      if (error) {
+        console.error('Error fetching session history:', error);
+        return []; // Return empty array instead of throwing
+      }
+      
+      return data || [];
     } catch (error) {
       console.error('Error fetching session history:', error);
-      throw error;
+      return []; // Return empty array instead of throwing
     }
   }
 

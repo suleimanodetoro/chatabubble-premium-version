@@ -395,9 +395,8 @@ private static async deleteUserData(userId: string): Promise<void> {
     try {
       console.log('Initiating password reset for email:', email);
       
-      // Create a more robust deep link that doesn't use nested routes
-      // This is more compatible with Supabase's password reset flow
-      const resetRedirectUrl = `${SITE_URL}/reset-password`;
+      // Use deep link URL instead of website URL
+      const resetRedirectUrl = Linking.createURL("reset-callback");
       console.log('Reset redirect URL:', resetRedirectUrl);
       
       // Make sure email is trimmed and lowercase
@@ -420,76 +419,87 @@ private static async deleteUserData(userId: string): Promise<void> {
   static async updatePassword(userId: string, newPassword: string) {
     try {
       console.log("Updating password with re-encryption for user:", userId);
-
+  
+      // Get current user information for proper auth type detection
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+  
+      // Detect auth type from multiple sources to ensure accuracy
+      let authType = await AsyncStorage.getItem(`@auth_type_${userId}`);
+      
+      // If not stored or possibly incorrect, detect from metadata
+      if (!authType || authType === 'password') {
+        const isSocialAuth = userData.user?.app_metadata?.provider && 
+                            userData.user.app_metadata.provider !== 'email';
+        
+        if (isSocialAuth) {
+          console.log("Detected social auth from metadata:", userData.user.app_metadata.provider);
+          authType = 'social';
+          // Update stored auth type to prevent future issues
+          await AsyncStorage.setItem(`@auth_type_${userId}`, 'social');
+        } else {
+          authType = 'password';
+        }
+      }
+      
+      console.log("Using auth type for encryption:", authType);
+  
       // First, update the password with Supabase
       const { data, error } = await supabase.auth.updateUser({
         password: newPassword,
       });
-
+  
       if (error) throw error;
-
-      // Check if we need to re-encrypt data
-      // This would be the case if we're coming from a password reset flow
-      const keyStatus = await AsyncStorage.getItem(`${KEY_STATUS}${userId}`);
-      const authType = await AsyncStorage.getItem(`@auth_type_${userId}`);
-
-      if (keyStatus && authType === "password") {
-        console.log("Re-encrypting data with new password");
-
-        // Generate a new encryption key based on the new password
-        await EncryptionService.generateUserKey(
-          userId,
-          data.user.email!,
-          "password"
-        );
-
-        // Re-encrypt any existing data using the EncryptionService utility
-        // That we've already fixed and implemented earlier
-        const sessions = await StorageService.getActiveSessions();
-        const userSessions = sessions.filter((s) => s.userId === userId);
-
-        console.log(`Found ${userSessions.length} sessions to re-encrypt`);
-
-        // Process each session - basic re-encryption logic
-        // In production, you might want to break this into chunks or do it in background
-        for (const session of userSessions) {
-          const messages = await StorageService.loadChatHistory(session.id);
-          if (messages.length > 0) {
-            const newKey = await EncryptionService.getEncryptionKey(userId);
-
-            if (newKey) {
-              // Encrypt messages with new key - simplified approach
-              // Actual logic would check if they're already encrypted and handle accordingly
-              const encryptedMessages = await Promise.all(
-                messages.map((msg) =>
-                  EncryptionService.encryptChatMessage(msg, userId)
-                )
-              );
-
-              await StorageService.saveChatHistory(
-                session.id,
-                encryptedMessages
-              );
-
-              // Update session
-              const updatedSession = {
-                ...session,
-                messages: encryptedMessages,
-                lastUpdated: Date.now(),
-              };
-              await StorageService.saveSession(updatedSession);
-            }
-          }
+  
+      // Always regenerate encryption key after password change
+      console.log("Regenerating encryption key with auth type:", authType);
+      
+      // Generate a new encryption key based on the detected auth type
+      await EncryptionService.generateUserKey(
+        userId,
+        data.user.email!,
+        authType as "password" | "social"
+      );
+      
+      await AsyncStorage.setItem(`@key_status:${userId}`, 'generated');
+  
+      // Re-encrypt existing data
+      const sessions = await StorageService.getActiveSessions();
+      const userSessions = sessions.filter((s) => s.userId === userId);
+  
+      console.log(`Found ${userSessions.length} sessions to re-encrypt`);
+  
+      // Process each session
+      for (const session of userSessions) {
+        const messages = await StorageService.loadChatHistory(session.id);
+        if (messages.length > 0) {
+          // Encrypt messages with new key
+          const encryptedMessages = await Promise.all(
+            messages.map((msg) =>
+              EncryptionService.encryptChatMessage(msg, userId)
+            )
+          );
+  
+          await StorageService.saveChatHistory(session.id, encryptedMessages);
+  
+          // Update session
+          const updatedSession = {
+            ...session,
+            messages: encryptedMessages,
+            lastUpdated: Date.now(),
+          };
+          await StorageService.saveSession(updatedSession);
         }
-
-        console.log("Data re-encryption completed");
       }
-
-      console.log("Password update completed successfully");
+  
+      console.log("Password update and data re-encryption completed");
       return { success: true };
     } catch (error) {
       console.error("Error in updatePassword:", error);
-      throw error;
+      return { 
+        success: false, 
+        error: (error as Error).message 
+      };
     }
   }
 }

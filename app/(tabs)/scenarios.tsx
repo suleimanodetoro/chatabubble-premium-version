@@ -63,54 +63,8 @@ const DifficultyBadge = ({ level }: { level: 'beginner' | 'intermediate' | 'adva
   );
 };
 
-// Category selector for scenario filtering
-const CategorySelector = ({ 
-  selectedCategory, 
-  onSelectCategory 
-}: { 
-  selectedCategory: string; 
-  onSelectCategory: (category: string) => void;
-}) => {
-  const theme = useTheme();
-  const categories = ['All', 'Shopping', 'Dining', 'Travel', 'Business', 'Casual'];
-  
-  return (
-    <ScrollView 
-      horizontal 
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.categoryList}
-    >
-      {categories.map((category, index) => {
-        const isSelected = selectedCategory === category.toLowerCase();
-        return (
-          <Pressable
-            key={category}
-            style={[
-              styles.categoryChip,
-              isSelected && { 
-                backgroundColor: theme.colors.primary.main 
-              }
-            ]}
-            onPress={() => onSelectCategory(
-              category === 'All' ? '' : category.toLowerCase()
-            )}
-          >
-            <Body2 
-              color={isSelected ? theme.colors.primary.contrast : theme.colors.text.primary}
-              weight={isSelected ? "semibold" : "regular"}
-            >
-              {category}
-            </Body2>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
-  );
-};
-
 export default function ScenariosScreen() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const theme = useTheme();
@@ -235,6 +189,9 @@ export default function ScenariosScreen() {
   };
 
   const renderScenarioItem = ({ item, index }: { item: Scenario; index: number }) => {
+    // Get category color for accents
+    const categoryColor = getCategoryColor(item.category);
+    
     return (
       <Animated.View
         entering={FadeInDown.delay(index * 100).springify()}
@@ -242,7 +199,17 @@ export default function ScenariosScreen() {
       >
         <Card
           variant="elevated"
-          style={styles.scenarioCard}
+          style={[
+            styles.scenarioCard,
+            // Add a subtle border for better demarcation
+            { 
+              borderLeftWidth: 5,
+              borderLeftColor: categoryColor,
+              borderColor: 'rgba(0,0,0,0.05)', 
+              borderWidth: 1,
+              borderRadius: 12,
+            }
+          ]}
           onPress={() => handleScenarioPress(item)}
         >
           <CardContent>
@@ -250,7 +217,7 @@ export default function ScenariosScreen() {
               <View style={styles.categoryBadgeContainer}>
                 <View style={[
                   styles.categoryBadge,
-                  { backgroundColor: getCategoryColor(item.category) }
+                  { backgroundColor: categoryColor }
                 ]}>
                   <Caption color="#fff" weight="semibold" style={styles.categoryText}>
                     {item.category}
@@ -282,7 +249,11 @@ export default function ScenariosScreen() {
             </Body2>
             
             <View style={styles.personaContainer}>
-              <View style={styles.personaAvatarContainer}>
+              <View style={[
+                styles.personaAvatarContainer,
+                // Match the persona avatar to the category color for consistency
+                { backgroundColor: categoryColor }
+              ]}>
                 <Feather name="user" size={16} color="#fff" />
               </View>
               <View style={styles.personaInfo}>
@@ -294,7 +265,11 @@ export default function ScenariosScreen() {
             <Button
               variant="primary"
               size="small"
-              style={styles.startButton}
+              style={[
+                styles.startButton,
+                // Match the button color to the category for visual consistency
+                { backgroundColor: categoryColor }
+              ]}
             >
               Start Conversation
             </Button>
@@ -338,18 +313,11 @@ export default function ScenariosScreen() {
     );
   };
 
-  // Filter scenarios based on search and category
+  // Filter scenarios based on search only
   const filteredScenarios = scenarios.filter(
     (scenario) => {
-      const matchesSearch = 
-        scenario.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        scenario.description.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const matchesCategory = selectedCategory 
-        ? scenario.category === selectedCategory 
-        : true;
-      
-      return matchesSearch && matchesCategory;
+      return scenario.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+             scenario.description.toLowerCase().includes(searchQuery.toLowerCase());
     }
   );
 
@@ -392,11 +360,6 @@ export default function ScenariosScreen() {
             Create
           </Button>
         </View>
-        
-        <CategorySelector 
-          selectedCategory={selectedCategory || 'All'} 
-          onSelectCategory={setSelectedCategory}
-        />
   
         <FlatList
           data={filteredScenarios}
@@ -415,6 +378,8 @@ export default function ScenariosScreen() {
               tintColor={theme.colors.primary.main}
             />
           }
+          // Increase spacing between items for better visual distinction
+          ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
         />
       </View>
     </SafeAreaView>
@@ -445,7 +410,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   searchInputContainer: {
     flex: 1,
@@ -455,7 +420,17 @@ const styles = StyleSheet.create({
     minWidth: 100,
   },
   scenarioCard: {
-    marginBottom: 16,
+    // Enhance shadow for better elevation
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4.65,
+    elevation: 6,
+    // Add subtle background gradient
+    backgroundColor: '#FFFFFF',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -505,7 +480,6 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#4A6FFF',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
@@ -537,19 +511,5 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 8,
     flexGrow: 1,
-  },
-  categoryList: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  categoryChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-    backgroundColor: '#F2F2F7',
-  },
-  selectedChip: {
-    backgroundColor: '#4A6FFF',
   },
 });

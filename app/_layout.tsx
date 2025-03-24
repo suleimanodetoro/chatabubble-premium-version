@@ -1,4 +1,4 @@
-// app/_layout.tsx
+// app/_layout.tsx 
 import "react-native-get-random-values";
 import { useEffect, useState, useRef } from "react";
 import { Stack } from "expo-router";
@@ -23,11 +23,19 @@ export default function RootLayout() {
   const { setUser } = useAppStore();
   const authChangeHandled = useRef(false);
   const isProcessingDeepLink = useRef(false); // Track deep link processing
+  const isPasswordReset = useRef(false); // Track password reset flow
 
   // Initialize auth state
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        // Check if we're in a password reset flow
+        const resetFlow = await AsyncStorage.getItem('@is_password_reset');
+        if (resetFlow === 'true') {
+          console.log('App is in password reset flow');
+          isPasswordReset.current = true;
+        }
+
         // Check for stored session
         const storedAuth = await AsyncStorage.getItem("supabase.auth.token");
         if (storedAuth) {
@@ -93,6 +101,15 @@ export default function RootLayout() {
       if (event === "SIGNED_IN" && session) {
         setSession(session);
 
+        // Check if this is a password reset flow
+        const resetFlow = await AsyncStorage.getItem('@is_password_reset');
+        if (resetFlow === 'true') {
+          console.log('Detected password reset flow - NOT redirecting to tabs');
+          isPasswordReset.current = true;
+          setIsSigningIn(false);
+          return; // Exit early to prevent redirect
+        }
+
         // Get the complete user profile
         const profile = await ProfileService.getProfile(session.user.id);
 
@@ -118,6 +135,8 @@ export default function RootLayout() {
         setSession(null);
         setUser(null);
         await AsyncStorage.removeItem("supabase.auth.token");
+        await AsyncStorage.removeItem('@is_password_reset');
+        isPasswordReset.current = false;
         router.replace("/(auth)/login");
         setIsSigningIn(false);
       } else if (event === "USER_UPDATED" && session) {
@@ -177,6 +196,11 @@ export default function RootLayout() {
         if (fragment && fragment.includes("access_token=")) {
           console.log("Access token found in fragment - processing reset");
           
+          // Mark this as a password reset flow BEFORE parsing token
+          // This is critical to prevent the auth state change handler from redirecting
+          await AsyncStorage.setItem('@is_password_reset', 'true');
+          isPasswordReset.current = true;
+          
           // Extract tokens from fragment
           const fragmentParams: Record<string, string> = {};
           fragment.split("&").forEach((pair) => {
@@ -184,47 +208,15 @@ export default function RootLayout() {
             if (key && value) fragmentParams[key] = value;
           });
           
-          console.log("Found tokens, attempting to set session");
+          // Navigate to the reset-callback screen with params
+          console.log("Navigating to reset-callback with token");
+          router.replace({
+            pathname: "/(auth)/reset-callback",
+            params: fragmentParams
+          });
           
-          // Attempt to set the session with the token
-          if (fragmentParams.access_token) {
-            const { error } = await supabase.auth.setSession({
-              access_token: fragmentParams.access_token,
-              refresh_token: fragmentParams.refresh_token || '',
-            });
-            
-            if (error) {
-              console.error("Error setting session:", error);
-              // Store error for display
-              await AsyncStorage.setItem('@reset_error', JSON.stringify({
-                code: 'session_error',
-                message: error.message || 'Failed to validate reset token'
-              }));
-              router.replace("/(auth)/forgot-password");
-              isProcessingDeepLink.current = false;
-              return;
-            }
-            
-            // Session was set successfully - now check if it's valid
-            const { data: { session: newSession } } = await supabase.auth.getSession();
-            
-            if (newSession) {
-              console.log("Successfully established session from reset token");
-              
-              // Now we're ready to navigate to the reset password screen
-              router.replace({
-                pathname: "/(auth)/reset-password",
-                params: {
-                  access_token: fragmentParams.access_token,
-                  refresh_token: fragmentParams.refresh_token || '',
-                  type: fragmentParams.type || 'recovery'
-                }
-              });
-              
-              isProcessingDeepLink.current = false;
-              return;
-            }
-          }
+          isProcessingDeepLink.current = false;
+          return;
         }
 
         // Check for error parameters in fragment
@@ -309,9 +301,9 @@ export default function RootLayout() {
   useEffect(() => {
     if (isLoading) return;
     
-    // Skip route protection if we're processing a deep link or during sign-in
-    if (isProcessingDeepLink.current || isSigningIn) {
-      console.log("Skipping route protection - auth action in progress");
+    // Skip route protection if we're processing a deep link, during sign-in or password reset
+    if (isProcessingDeepLink.current || isSigningIn || isPasswordReset.current) {
+      console.log("Skipping route protection - auth action in progress or password reset");
       return;
     }
 
@@ -323,13 +315,22 @@ export default function RootLayout() {
         const { data } = await supabase.auth.getSession();
         const hasValidSession = !!data.session;
         
+        // Double check if this is a password reset flow
+        const resetFlow = await AsyncStorage.getItem('@is_password_reset');
+        if (resetFlow === 'true') {
+          console.log('Skip route protection - in password reset flow');
+          isPasswordReset.current = true;
+          return;
+        }
+        
         console.log("Route protection check: has valid session?", hasValidSession);
         
         if (!hasValidSession && !inAuthGroup) {
           console.log("No active session found, redirecting to login");
           router.replace("/(auth)/login");
-        } else if (hasValidSession && inAuthGroup) {
+        } else if (hasValidSession && inAuthGroup && !isPasswordReset.current) {
           // If we're in auth group but have a session, go to tabs
+          // But only if we're not in a password reset flow
           console.log("Valid session found while in auth group, redirecting to tabs");
           router.replace("/(tabs)");
         }
@@ -357,7 +358,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <StatusBar style="auto" />
-      {!session ? (
+      {!session || isPasswordReset.current ? (
         <Stack screenOptions={commonStackOptions}>
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="reset-callback" />
