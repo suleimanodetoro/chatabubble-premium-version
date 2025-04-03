@@ -18,6 +18,7 @@ export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSigningIn, setIsSigningIn] = useState(false); // Track sign-in process
+  const [initialRouteDetermined, setInitialRouteDetermined] = useState(false); // Track if initial route has been determined
   const router = useRouter();
   const segments = useSegments();
   const { setUser } = useAppStore();
@@ -29,6 +30,8 @@ export default function RootLayout() {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        console.log('Initializing auth state...');
+        
         // Check if we're in a password reset flow
         const resetFlow = await AsyncStorage.getItem('@is_password_reset');
         if (resetFlow === 'true') {
@@ -76,6 +79,7 @@ export default function RootLayout() {
         console.error("Auth initialization error:", error);
       } finally {
         setIsLoading(false);
+        setInitialRouteDetermined(true); // Mark that initial route can be determined now
       }
     };
 
@@ -84,6 +88,8 @@ export default function RootLayout() {
 
   // Handle auth state changes
   useEffect(() => {
+    console.log('Setting up auth state change handler...');
+    
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -122,10 +128,19 @@ export default function RootLayout() {
           }
         );
 
+        // Check if user has completed onboarding
+        console.log('Checking onboarding status after sign in');
+        const hasCompletedOnboarding = await ProfileService.hasCompletedOnboarding(session.user.id);
+        console.log('Onboarding status after sign in:', hasCompletedOnboarding ? 'Completed' : 'Not completed');
+
         // Add a small delay to ensure state is updated before navigation
         setTimeout(() => {
-          console.log("Redirecting to tabs after successful sign-in");
-          router.replace("/(tabs)");
+          console.log("Redirecting after successful sign-in");
+          if (hasCompletedOnboarding) {
+            router.replace("/(tabs)");
+          } else {
+            router.replace("/onboarding");
+          }
           // Reset the sign-in flag after navigation
           setTimeout(() => {
             setIsSigningIn(false);
@@ -254,7 +269,7 @@ export default function RootLayout() {
           const { data: { session } } = await supabase.auth.getSession();
 
           if (session?.user) {
-            console.log("Valid session found in callback, redirecting to tabs");
+            console.log("Valid session found in callback, checking onboarding status");
             setSession(session);
 
             // Get the complete user profile
@@ -269,7 +284,17 @@ export default function RootLayout() {
               }
             );
 
-            router.replace("/(tabs)");
+            // Check onboarding status before redirecting
+            const hasCompletedOnboarding = await ProfileService.hasCompletedOnboarding(session.user.id);
+            
+            if (hasCompletedOnboarding) {
+              console.log('User has completed onboarding, going to tabs');
+              router.replace("/(tabs)");
+            } else {
+              console.log('User has not completed onboarding, going to onboarding');
+              router.replace("/onboarding");
+            }
+            
             isProcessingDeepLink.current = false;
             return;
           }
@@ -299,7 +324,11 @@ export default function RootLayout() {
 
   // Update the route protection logic
   useEffect(() => {
-    if (isLoading) return;
+    // Skip until we've determined the initial route
+    if (isLoading || !initialRouteDetermined) {
+      console.log('Skipping route protection - still loading or initial route not determined');
+      return;
+    }
     
     // Skip route protection if we're processing a deep link, during sign-in or password reset
     if (isProcessingDeepLink.current || isSigningIn || isPasswordReset.current) {
@@ -308,7 +337,12 @@ export default function RootLayout() {
     }
 
     const inAuthGroup = segments[0] === "(auth)";
+    const inTabsGroup = segments[0] === "(tabs)";
+    const onSplashScreen = segments[0] === "splash";
+    const onOnboardingScreen = segments[0] === "onboarding";
 
+    console.log('Current route segment:', segments[0]);
+    
     // Check session from Supabase directly to avoid race conditions
     const checkSessionAndNavigate = async () => {
       try {
@@ -323,16 +357,51 @@ export default function RootLayout() {
           return;
         }
         
-        console.log("Route protection check: has valid session?", hasValidSession);
+        console.log("Route protection check:", {
+          hasValidSession,
+          inAuthGroup,
+          inTabsGroup,
+          onSplashScreen,
+          onOnboardingScreen
+        });
         
-        if (!hasValidSession && !inAuthGroup) {
-          console.log("No active session found, redirecting to login");
-          router.replace("/(auth)/login");
-        } else if (hasValidSession && inAuthGroup && !isPasswordReset.current) {
-          // If we're in auth group but have a session, go to tabs
-          // But only if we're not in a password reset flow
-          console.log("Valid session found while in auth group, redirecting to tabs");
-          router.replace("/(tabs)");
+        // Allow splash screen to handle its own routing
+        if (onSplashScreen) {
+          console.log('On splash screen, skipping route protection');
+          return;
+        }
+        
+        if (hasValidSession) {
+          // Check if user has completed onboarding
+          const hasCompletedOnboarding = data.session?.user 
+            ? await ProfileService.hasCompletedOnboarding(data.session.user.id)
+            : false;
+          
+          console.log('User authenticated, onboarding status:', hasCompletedOnboarding);
+          
+          if (inAuthGroup) {
+            // If we're in auth group but have a session, redirect based on onboarding status
+            console.log('In auth group with valid session, redirecting');
+            if (hasCompletedOnboarding) {
+              router.replace("/(tabs)");
+            } else {
+              router.replace("/onboarding");
+            }
+          } else if (onOnboardingScreen && hasCompletedOnboarding) {
+            // User already completed onboarding but somehow got back there
+            console.log('User has completed onboarding but is on onboarding screen, redirecting to tabs');
+            router.replace("/(tabs)");
+          } else if (inTabsGroup && !hasCompletedOnboarding) {
+            // User hasn't completed onboarding but is trying to access tabs
+            console.log('User has not completed onboarding but is on tabs, redirecting to onboarding');
+            router.replace("/onboarding");
+          }
+        } else {
+          // No valid session
+          if (!inAuthGroup && !onSplashScreen) {
+            console.log("No active session found, redirecting to login");
+            router.replace("/(auth)/login");
+          }
         }
       } catch (error) {
         console.error("Error checking session:", error);
@@ -340,7 +409,7 @@ export default function RootLayout() {
     };
     
     checkSessionAndNavigate();
-  }, [session, segments, isLoading, isSigningIn]);
+  }, [segments, isLoading, isSigningIn, initialRouteDetermined]);
 
   if (isLoading) {
     return null;
@@ -358,29 +427,26 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <StatusBar style="auto" />
-      {!session || isPasswordReset.current ? (
-        <Stack screenOptions={commonStackOptions}>
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="reset-callback" />
-        </Stack>
-      ) : (
-        <Stack screenOptions={commonStackOptions}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen
-            name="(chat)"
-            options={{
-              presentation: "fullScreenModal",
-            }}
-          />
-          <Stack.Screen
-            name="create-scenario"
-            options={{
-              presentation: "modal",
-              title: "Create Scenario",
-            }}
-          />
-        </Stack>
-      )}
+      <Stack screenOptions={commonStackOptions}>
+        <Stack.Screen name="splash" options={{ animation: 'fade' }} />
+        <Stack.Screen name="onboarding" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="(auth)" options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+        <Stack.Screen
+          name="(chat)"
+          options={{
+            presentation: "fullScreenModal",
+            animation: 'slide_from_right'
+          }}
+        />
+        <Stack.Screen
+          name="create-scenario"
+          options={{
+            presentation: "modal",
+            title: "Create Scenario",
+          }}
+        />
+      </Stack>
     </ThemeProvider>
   );
 }
