@@ -1,26 +1,88 @@
 // app/create-scenario.tsx
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   StyleSheet,
   ScrollView,
-  TextInput,
-  Alert,
-  Pressable,
   KeyboardAvoidingView,
   Platform,
+  View,
+  Pressable,
+  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { ThemedView } from '@/components/ThemedView';
-import { ThemedText } from '@/components/ThemedText';
-import { LanguageSelector } from '@/components/ui/LanguageSelector';
 import { Scenario, Language } from '@/types';
 import { useAppStore } from '@/hooks/useAppStore';
 import { generateId } from '@/lib/utils/ids';
 import { ScenarioService } from '@/lib/services/scenario';
+import { useTheme } from '@/lib/theme/theme';
+import { Heading1, Heading2, Body1, Body2, Caption } from "@/components/ui/Typography";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Card, CardContent } from "@/components/ui/Card";
+import { BackButton } from '@/components/ui/BackButton';
+import { LanguageSelector } from '@/components/ui/LanguageSelector';
+import { Feather } from '@expo/vector-icons';
+import Animated, { 
+  FadeInDown, 
+  FadeIn,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring
+} from 'react-native-reanimated';
 
+// Category chip component
+const CategoryChip = ({ 
+  label, 
+  isSelected, 
+  onPress 
+}: { 
+  label: string; 
+  isSelected: boolean; 
+  onPress: () => void;
+}) => {
+  const theme = useTheme();
+  
+  return (
+    <Pressable
+      style={[
+        styles.chip,
+        isSelected ? { 
+          backgroundColor: theme.colors.primary.main,
+          shadowColor: theme.colors.primary.main,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.3,
+          shadowRadius: 4,
+          elevation: 3,
+        } : { 
+          backgroundColor: '#F5F7FA',
+        }
+      ]}
+      onPress={onPress}
+    >
+      {isSelected && (
+        <Feather 
+          name="check" 
+          size={14} 
+          color="#fff" 
+          style={{ marginRight: 4 }}
+        />
+      )}
+      <Body2 
+        color={isSelected ? "#fff" : theme.colors.text.primary}
+        weight={isSelected ? "semibold" : "regular"}
+      >
+        {label}
+      </Body2>
+    </Pressable>
+  );
+};
 
 export default function CreateScenarioScreen() {
+  const theme = useTheme();
+  const { addScenario, user } = useAppStore();
+
+  // Form state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [personaName, setPersonaName] = useState('');
@@ -31,19 +93,36 @@ export default function CreateScenarioScreen() {
   const [languageStyle, setLanguageStyle] = useState('casual');
   const [selectedLanguage, setSelectedLanguage] = useState<Language | undefined>();
   const [isLanguageSelectorVisible, setIsLanguageSelectorVisible] = useState(false);
-  const { addScenario, user } = useAppStore();
-
-
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Animation values
+  const headerOpacity = useSharedValue(0);
+  const formOpacity = useSharedValue(0);
+  
+  // Start animations - FIXED: Changed useState to useEffect
+  useEffect(() => {
+    setTimeout(() => {
+      headerOpacity.value = withSpring(1, { damping: 18 });
+    }, 100);
+    
+    setTimeout(() => {
+      formOpacity.value = withSpring(1, { damping: 18 });
+    }, 300);
+  }, []); // Empty dependency array to run only once on mount
+  
+  // Animated styles
+  const headerAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: headerOpacity.value,
+    transform: [{ translateY: (1 - headerOpacity.value) * -20 }]
+  }));
+  
+  const formAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: formOpacity.value,
+    transform: [{ translateY: (1 - formOpacity.value) * -15 }]
+  }));
 
   const handleCreate = useCallback(async () => {
-    console.log('Validating form...', {
-      title,
-      description,
-      personaName,
-      personaRole,
-      selectedLanguage,
-    });
-
+    // Validation
     if (!title.trim()) {
       Alert.alert('Missing Information', 'Please enter a title');
       return;
@@ -66,211 +145,225 @@ export default function CreateScenarioScreen() {
     }
 
     try {
-        if (!user?.id) {
-          Alert.alert('Error', 'Must be logged in to create scenarios');
-          return;
-        }
-  
-        const newScenario: Scenario = {
-          id: generateId(),
-          title: title.trim(),
-          description: description.trim(),
-          category: category as 'shopping' | 'dining' | 'travel' | 'business' | 'casual',
-          difficulty: difficulty as 'beginner' | 'intermediate' | 'advanced',
-          persona: {
-            name: personaName.trim(),
-            role: personaRole.trim(),
-            personality: personaPersonality.trim() || 'Friendly and professional',
-            languageStyle: languageStyle as 'formal' | 'casual' | 'mixed',
-          },
-          target_language: selectedLanguage,
-        };
-  
-        // First save to Supabase
-        await ScenarioService.createScenario(newScenario, user.id);
-        
-        // Then add to local state
-        addScenario(newScenario);
-        router.back();
-      } catch (error) {
-        console.error('Error creating scenario:', error);
-        Alert.alert('Error', 'Failed to create scenario. Please try again.');
+      setIsSubmitting(true);
+      
+      if (!user?.id) {
+        Alert.alert('Error', 'Must be logged in to create scenarios');
+        return;
       }
-    }, [
-      title,
-      description,
-      personaName,
-      personaRole,
-      personaPersonality,
-      category,
-      difficulty,
-      languageStyle,
-      selectedLanguage,
-      addScenario,
-      user
-    ]);
+  
+      const newScenario: Scenario = {
+        id: generateId(),
+        title: title.trim(),
+        description: description.trim(),
+        category: category as 'shopping' | 'dining' | 'travel' | 'business' | 'casual',
+        difficulty: difficulty as 'beginner' | 'intermediate' | 'advanced',
+        persona: {
+          name: personaName.trim(),
+          role: personaRole.trim(),
+          personality: personaPersonality.trim() || 'Friendly and professional',
+          languageStyle: languageStyle as 'formal' | 'casual' | 'mixed',
+        },
+        target_language: selectedLanguage,
+      };
+
+      // First save to Supabase
+      await ScenarioService.createScenario(newScenario, user.id);
+      
+      // Then add to local state
+      addScenario(newScenario);
+      router.back();
+    } catch (error) {
+      console.error('Error creating scenario:', error);
+      Alert.alert('Error', 'Failed to create scenario. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [
+    title,
+    description,
+    personaName,
+    personaRole,
+    personaPersonality,
+    category,
+    difficulty,
+    languageStyle,
+    selectedLanguage,
+    addScenario,
+    user
+  ]);
 
   return (
-<SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-<KeyboardAvoidingView 
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.container}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       >
-        <ScrollView
-          contentContainerStyle={styles.contentContainer}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <ThemedText style={styles.title}>Create New Scenario</ThemedText>
-
-          <ThemedView style={styles.inputGroup}>
-            <ThemedText style={styles.label}>Title*</ThemedText>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g., Shopping for Groceries"
-              placeholderTextColor="#A3A3A3"
-              value={title}
-              onChangeText={setTitle}
-            />
-          </ThemedView>
-
-          <ThemedView style={styles.inputGroup}>
-            <ThemedText style={styles.label}>Description*</ThemedText>
-            <TextInput
-              style={[styles.input, styles.multilineInput]}
-              placeholder="Describe the scenario and its goals"
-              placeholderTextColor="#A3A3A3"
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              numberOfLines={3}
-            />
-          </ThemedView>
-
-          <ThemedView style={styles.inputGroup}>
-            <ThemedText style={styles.label}>Persona Name*</ThemedText>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g., Maria"
-              placeholderTextColor="#A3A3A3"
-              value={personaName}
-              onChangeText={setPersonaName}
-            />
-          </ThemedView>
-
-          <ThemedView style={styles.inputGroup}>
-            <ThemedText style={styles.label}>Persona Role*</ThemedText>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g., Shop Assistant"
-              placeholderTextColor="#A3A3A3"
-              value={personaRole}
-              onChangeText={setPersonaRole}
-            />
-          </ThemedView>
-
-          <ThemedView style={styles.inputGroup}>
-            <ThemedText style={styles.label}>Persona Personality</ThemedText>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g., Friendly and helpful"
-              placeholderTextColor="#A3A3A3"
-              value={personaPersonality}
-              onChangeText={setPersonaPersonality}
-            />
-          </ThemedView>
-
-          <ThemedView style={styles.selectionGroup}>
-            <ThemedText style={styles.label}>Category</ThemedText>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {['Shopping', 'Dining', 'Travel', 'Business', 'Casual'].map((cat) => (
-                <Pressable
-                  key={cat}
-                  style={[
-                    styles.chip,
-                    category === cat.toLowerCase() && styles.selectedChip,
-                  ]}
-                  onPress={() => setCategory(cat.toLowerCase())}
-                >
-                  <ThemedText style={[
-                    styles.chipText,
-                    category === cat.toLowerCase() && styles.selectedChipText,
-                  ]}>
-                    {cat}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </ThemedView>
-
-          <ThemedView style={styles.selectionGroup}>
-            <ThemedText style={styles.label}>Difficulty</ThemedText>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {['Beginner', 'Intermediate', 'Advanced'].map((diff) => (
-                <Pressable
-                  key={diff}
-                  style={[
-                    styles.chip,
-                    difficulty === diff.toLowerCase() && styles.selectedChip,
-                  ]}
-                  onPress={() => setDifficulty(diff.toLowerCase())}
-                >
-                  <ThemedText style={[
-                    styles.chipText,
-                    difficulty === diff.toLowerCase() && styles.selectedChipText,
-                  ]}>
-                    {diff}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </ThemedView>
-
-          <ThemedView style={styles.selectionGroup}>
-            <ThemedText style={styles.label}>Language Style</ThemedText>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {['Casual', 'Formal', 'Mixed'].map((style) => (
-                <Pressable
-                  key={style}
-                  style={[
-                    styles.chip,
-                    languageStyle === style.toLowerCase() && styles.selectedChip,
-                  ]}
-                  onPress={() => setLanguageStyle(style.toLowerCase())}
-                >
-                  <ThemedText style={[
-                    styles.chipText,
-                    languageStyle === style.toLowerCase() && styles.selectedChipText,
-                  ]}>
-                    {style}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </ThemedView>
-
-          <ThemedView style={styles.inputGroup}>
-            <ThemedText style={styles.label}>Target Language*</ThemedText>
-            <Pressable
-              style={styles.languageSelector}
-              onPress={() => setIsLanguageSelectorVisible(true)}
-            >
-              <ThemedText
-                style={selectedLanguage ? styles.selectedLanguage : styles.placeholderText}
-              >
-                {selectedLanguage?.name || 'Select a language'}
-              </ThemedText>
-            </Pressable>
-          </ThemedView>
-
-          <Pressable 
-            style={styles.createButton} 
-            onPress={handleCreate}
+        <Animated.View style={[styles.header, headerAnimatedStyle]}>
+          <View style={styles.headerRow}>
+            <BackButton />
+            <Heading1 style={styles.headerTitle}>Create Scenario</Heading1>
+            <View style={{ width: 40 }} />
+          </View>
+          <Body1 style={styles.headerSubtitle} color={theme.colors.text.secondary}>
+            Create a new language practice scenario
+          </Body1>
+        </Animated.View>
+        
+        <Animated.View style={[styles.formContainer, formAnimatedStyle]}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            <ThemedText style={styles.createButtonText}>Create Scenario</ThemedText>
-          </Pressable>
-        </ScrollView>
+            <Card variant="elevated" style={styles.formCard}>
+              <CardContent>
+                <Heading2 style={styles.sectionTitle}>Scenario Details</Heading2>
+                
+                <Input
+                  label="Title*"
+                  placeholder="e.g., Shopping for Groceries"
+                  value={title}
+                  onChangeText={setTitle}
+                  containerStyle={styles.inputGroup}
+                  iconName="edit-3"
+                />
+                
+                <Input
+                  label="Description*"
+                  placeholder="Describe the scenario and its goals"
+                  value={description}
+                  onChangeText={setDescription}
+                  multiline
+                  numberOfLines={3}
+                  containerStyle={styles.inputGroup}
+                  iconName="align-left"
+                />
+                
+                <Heading2 style={[styles.sectionTitle, styles.topSpacing]}>Conversation Partner</Heading2>
+                
+                <Input
+                  label="Persona Name*"
+                  placeholder="e.g., Maria"
+                  value={personaName}
+                  onChangeText={setPersonaName}
+                  containerStyle={styles.inputGroup}
+                  iconName="user"
+                />
+                
+                <Input
+                  label="Persona Role*"
+                  placeholder="e.g., Shop Assistant"
+                  value={personaRole}
+                  onChangeText={setPersonaRole}
+                  containerStyle={styles.inputGroup}
+                  iconName="briefcase"
+                />
+                
+                <Input
+                  label="Persona Personality"
+                  placeholder="e.g., Friendly and helpful"
+                  value={personaPersonality}
+                  onChangeText={setPersonaPersonality}
+                  containerStyle={styles.inputGroup}
+                  iconName="smile"
+                  hint="Leave blank for default friendly personality"
+                />
+                
+                <Heading2 style={[styles.sectionTitle, styles.topSpacing]}>Settings</Heading2>
+                
+                <View style={styles.selectionGroup}>
+                  <Body1 weight="semibold" style={styles.selectionLabel}>Category</Body1>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.chipsContainer}
+                  >
+                    {['Shopping', 'Dining', 'Travel', 'Business', 'Casual'].map((cat) => (
+                      <CategoryChip
+                        key={cat}
+                        label={cat}
+                        isSelected={category === cat.toLowerCase()}
+                        onPress={() => setCategory(cat.toLowerCase())}
+                      />
+                    ))}
+                  </ScrollView>
+                </View>
+                
+                <View style={styles.selectionGroup}>
+                  <Body1 weight="semibold" style={styles.selectionLabel}>Difficulty</Body1>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.chipsContainer}
+                  >
+                    {['Beginner', 'Intermediate', 'Advanced'].map((diff) => (
+                      <CategoryChip
+                        key={diff}
+                        label={diff}
+                        isSelected={difficulty === diff.toLowerCase()}
+                        onPress={() => setDifficulty(diff.toLowerCase())}
+                      />
+                    ))}
+                  </ScrollView>
+                </View>
+                
+                <View style={styles.selectionGroup}>
+                  <Body1 weight="semibold" style={styles.selectionLabel}>Language Style</Body1>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.chipsContainer}
+                  >
+                    {['Casual', 'Formal', 'Mixed'].map((style) => (
+                      <CategoryChip
+                        key={style}
+                        label={style}
+                        isSelected={languageStyle === style.toLowerCase()}
+                        onPress={() => setLanguageStyle(style.toLowerCase())}
+                      />
+                    ))}
+                  </ScrollView>
+                </View>
+                
+                <View style={styles.languageGroup}>
+                  <Body1 weight="semibold" style={styles.selectionLabel}>Target Language*</Body1>
+                  <Pressable
+                    style={styles.languageSelector}
+                    onPress={() => setIsLanguageSelectorVisible(true)}
+                  >
+                    <Feather 
+                      name="globe" 
+                      size={18} 
+                      color={selectedLanguage ? theme.colors.primary.main : theme.colors.text.hint} 
+                      style={styles.languageIcon}
+                    />
+                    <Body1
+                      color={selectedLanguage ? theme.colors.text.primary : theme.colors.text.hint}
+                    >
+                      {selectedLanguage?.name || 'Select a language'}
+                    </Body1>
+                    <Feather name="chevron-down" size={18} color={theme.colors.text.hint} />
+                  </Pressable>
+                </View>
+              </CardContent>
+            </Card>
+            
+            <Button 
+              variant="primary"
+              fullWidth
+              size="large"
+              icon="check"
+              loading={isSubmitting}
+              disabled={isSubmitting}
+              onPress={handleCreate}
+              style={styles.createButton}
+            >
+              Create Scenario
+            </Button>
+          </ScrollView>
+        </Animated.View>
 
         <LanguageSelector
           isVisible={isLanguageSelectorVisible}
@@ -286,92 +379,86 @@ export default function CreateScenarioScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: '#fff',
   },
   container: {
     flex: 1,
   },
-  contentContainer: {
-    padding: 16,
-    paddingBottom: 34,
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 16,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    marginBottom: 24,
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  headerTitle: {
+    textAlign: 'center',
+    flexGrow: 1,
+  },
+  headerSubtitle: {
+    textAlign: 'center',
+    opacity: 0.8,
+  },
+  formContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 50,
+  },
+  formCard: {
+    marginBottom: 20,
+    borderRadius: 16,
+  },
+  sectionTitle: {
+    marginBottom: 16,
+  },
+  topSpacing: {
+    marginTop: 12,
   },
   inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 8,
-    color: '#1C1C1E',
-  },
-  input: {
-    height: 48,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    paddingHorizontal: 16,
-    fontSize: 16,
-    backgroundColor: '#FFFFFF',
-    color: '#1C1C1E',
-  },
-  multilineInput: {
-    height: 80,
-    paddingTop: 12,
-    paddingBottom: 12,
-    textAlignVertical: 'top',
+    marginBottom: 16,
   },
   selectionGroup: {
     marginBottom: 20,
   },
+  selectionLabel: {
+    marginBottom: 12,
+  },
+  chipsContainer: {
+    flexDirection: 'row',
+    paddingVertical: 4,
+  },
   chip: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F2F2F7',
-    marginRight: 8,
+    marginRight: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  selectedChip: {
-    backgroundColor: '#007AFF',
-  },
-  chipText: {
-    fontSize: 16,
-    color: '#1C1C1E',
-  },
-  selectedChipText: {
-    color: '#FFFFFF',
+  languageGroup: {
+    marginBottom: 24,
   },
   languageSelector: {
-    height: 48,
-    borderRadius: 10,
+    height: 52,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E5E5EA',
+    borderColor: '#E5E7EB',
     paddingHorizontal: 16,
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
   },
-  placeholderText: {
-    color: '#A3A3A3',
-    fontSize: 16,
-  },
-  selectedLanguage: {
-    color: '#1C1C1E',
-    fontSize: 16,
+  languageIcon: {
+    marginRight: 12,
   },
   createButton: {
-    backgroundColor: '#007AFF',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  createButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    marginTop: 8,
   },
 });
