@@ -1,23 +1,24 @@
+// lib/theme/theme.ts
 import { createContext, useContext } from 'react';
 import { TextStyle } from 'react-native';
 
 // Design tokens
 export const colors = {
-  // Primary palette
+  // Primary palette - Updated to green
   primary: {
-    main: '#4A6FFF',
-    light: '#7A95FF',
-    dark: '#3D56CC',
+    main: '#2E7D32', // Forest green
+    light: '#4CAF50', // Light green 
+    dark: '#1B5E20', // Dark green
     contrast: '#FFFFFF',
   },
   secondary: {
-    main: '#FF6B6B',
-    light: '#FF9797',
-    dark: '#D45555',
+    main: '#FF8A65', // Warm coral that complements green
+    light: '#FFAB91',
+    dark: '#E64A19',
     contrast: '#FFFFFF',
   },
   tertiary: {
-    main: '#6CD9A3',
+    main: '#6CD9A3', // Light green as accent
     light: '#92E7BB',
     dark: '#51B082',
     contrast: '#FFFFFF',
@@ -206,7 +207,7 @@ export const animation = {
   },
 };
 
-// Complete theme object (now including fontSizes)
+// Complete theme object
 export const theme = {
   colors,
   spacing,
@@ -224,3 +225,4 @@ export const ThemeContext = createContext<ThemeContextType>(theme);
 
 // Theme provider hook
 export const useTheme = () => useContext(ThemeContext);
+
