@@ -81,7 +81,7 @@ const ProfileHeader = ({
     <Card variant="flat" style={styles.profileHeaderCard}>
       <CardContent style={styles.profileHeaderContent}>
         <TouchableOpacity onPress={handlePressAvatar}>
-          <Animated.View style={[styles.avatarContainer, avatarStyle]}>
+          <Animated.View style={[styles.avatarContainer, avatarStyle, { backgroundColor: theme.colors.primary.main }]}>
             <Heading1 color="#fff">{getInitials()}</Heading1>
           </Animated.View>
         </TouchableOpacity>
@@ -592,13 +592,6 @@ export default function ProfileScreen() {
                   description="Change your password"
                   onPress={() => setIsPasswordModalVisible(true)}
                 />
-                
-                <SettingsRow
-                  icon="globe"
-                  title="Language Preferences"
-                  description="Manage your learning languages"
-                  onPress={() => {}}
-                />
               </CardContent>
             </Card>
           </View>
@@ -913,7 +906,6 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: "#4A6FFF",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 16,
@@ -951,7 +943,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "rgba(74, 111, 255, 0.1)",
+    backgroundColor: "rgba(46, 125, 50, 0.1)", // Using primary color with opacity
     alignItems: "center",
     justifyContent: "center",
   },

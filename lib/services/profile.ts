@@ -1,10 +1,12 @@
 // lib/services/profile.ts
 import { supabase } from '@/lib/supabase/client';
 import { Language } from '@/types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ProfileSettings {
   notifications?: boolean;
   theme?: 'light' | 'dark' | 'system';
+  hasCompletedOnboarding?: boolean;
 }
 
 export class ProfileService {
@@ -63,7 +65,7 @@ export class ProfileService {
         learning_languages: [],
         current_levels: {},
         daily_streak: 0,
-        settings: {}
+        settings: { hasCompletedOnboarding: false } // Initialize with onboarding not completed
       };
 
       console.log('Inserting new profile:', newProfile);
@@ -127,10 +129,52 @@ export class ProfileService {
     }
   }
 
+  /**
+   * Checks if a user has completed the onboarding process
+   * Looks at both profile settings in the database and AsyncStorage
+   */
+  static async hasCompletedOnboarding(userId: string): Promise<boolean> {
+    try {
+      console.log('Checking if user has completed onboarding:', userId);
+      
+      // First check profile settings in the database
+      const profile = await this.getProfile(userId);
+      
+      if (profile?.settings?.hasCompletedOnboarding === true) {
+        console.log('Found onboarding completed in profile settings');
+        return true;
+      }
+      
+      // If not found in profile, check AsyncStorage as fallback
+      const value = await AsyncStorage.getItem(`@onboarding_completed:${userId}`);
+      if (value === 'true') {
+        console.log('Found onboarding completed in AsyncStorage');
+        
+        // Update profile settings if found in AsyncStorage but not in profile
+        if (profile) {
+          await this.updateProfile(userId, {
+            settings: {
+              ...(profile.settings || {}),
+              hasCompletedOnboarding: true
+            }
+          });
+        }
+        return true;
+      }
+      
+      console.log('User has not completed onboarding');
+      return false;
+    } catch (error) {
+      console.error('Error checking onboarding status:', error);
+      return false;
+    }
+  }
+
   static async updateProfile(userId: string, updates: Partial<{
     username?: string;
     settings?: ProfileSettings;
     native_language?: Language;
+    current_levels?: Record<string, string>;
   }>) {
     try {
       console.log('Updating profile for:', userId, 'with:', updates);
