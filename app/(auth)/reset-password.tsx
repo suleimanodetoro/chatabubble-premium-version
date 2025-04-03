@@ -1,13 +1,31 @@
 // app/(auth)/reset-password.tsx
 import { useState, useEffect } from 'react';
-import { StyleSheet, TextInput, Pressable, Alert, ActivityIndicator, View, BackHandler } from 'react-native';
+import {
+  StyleSheet,
+  Alert,
+  View,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  BackHandler
+} from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
-import { ThemedText } from '@/components/ThemedText';
 import { supabase } from '@/lib/supabase/client';
 import { BackButton } from '@/components/ui/BackButton';
 import { AuthService } from '@/lib/services/auth';
+import { useTheme } from '@/lib/theme/theme';
+import { Heading1, Heading2, Body1, Body2, Caption } from "@/components/ui/Typography";
+import { Button } from "@/components/ui/Button";
+import { Card, CardContent } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
+import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Animated, { 
+  FadeInDown, 
+  FadeIn
+} from "react-native-reanimated";
 
 export default function ResetPasswordScreen() {
   const [password, setPassword] = useState('');
@@ -19,6 +37,7 @@ export default function ResetPasswordScreen() {
   const [isForceReset, setIsForceReset] = useState(false);
   const router = useRouter();
   const params = useLocalSearchParams();
+  const theme = useTheme();
   
   console.log("Reset password screen mounted with params:", params);
   
@@ -144,7 +163,7 @@ export default function ResetPasswordScreen() {
       
       console.log("User found, updating password for:", user.id);
       
-      // Use AuthService instead of direct Supabase call - this is the key fix
+      // Use AuthService instead of direct Supabase call
       const { success, error: updateError } = await AuthService.updatePassword(
         user.id,
         password
@@ -191,88 +210,147 @@ export default function ResetPasswordScreen() {
 
   if (validating) {
     return (
-      <ThemedView style={[styles.container, styles.centerContent]}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <ThemedText style={styles.loadingText}>Validating your reset link...</ThemedText>
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Animated.View entering={FadeIn}>
+            <View style={styles.loadingIconContainer}>
+              <Feather name="loader" size={36} color={theme.colors.primary.main} />
+            </View>
+            <Body1 style={styles.loadingText}>Validating your reset link...</Body1>
+          </Animated.View>
+        </View>
       </ThemedView>
     );
   }
 
   if (!validated) {
     return (
-      <ThemedView style={[styles.container, styles.centerContent]}>
-        <ThemedText style={styles.errorIcon}>❌</ThemedText>
-        <ThemedText style={styles.errorTitle}>
-          Reset Link Invalid
-        </ThemedText>
-        <ThemedText style={styles.errorText}>
-          {error || 'The password reset link is invalid or has expired.'}
-        </ThemedText>
-        <Pressable
-          style={styles.button}
-          onPress={() => router.replace('/(auth)/forgot-password')}
-        >
-          <ThemedText style={styles.buttonText}>
-            Request New Reset Link
-          </ThemedText>
-        </Pressable>
+      <ThemedView style={styles.container}>
+        <View style={styles.errorValidationContainer}>
+          <Animated.View 
+            style={styles.iconContainer}
+            entering={FadeInDown.delay(100).springify()}
+          >
+            <View style={[styles.iconCircle, { backgroundColor: theme.colors.error.light }]}>
+              <Feather name="x" size={36} color={theme.colors.error.main} />
+            </View>
+          </Animated.View>
+          
+          <Animated.View 
+            entering={FadeInDown.delay(200).springify()}
+          >
+            <Heading2 style={styles.errorTitle}>
+              Reset Link Invalid
+            </Heading2>
+            
+            <Body1 style={styles.errorDescription}>
+              {error || 'The password reset link is invalid or has expired.'}
+            </Body1>
+          </Animated.View>
+          
+          <Animated.View 
+            entering={FadeInDown.delay(300).springify()}
+            style={styles.errorActionContainer}
+          >
+            <Button
+              variant="primary"
+              size="large"
+              onPress={() => router.replace('/(auth)/forgot-password')}
+            >
+              Request New Reset Link
+            </Button>
+          </Animated.View>
+        </View>
       </ThemedView>
     );
   }
 
   return (
     <ThemedView style={styles.container}>
-      <View style={styles.header}>
-        <BackButton onPress={handleBackPress} />
-      </View>
-      
-      <ThemedText style={styles.title}>Set New Password</ThemedText>
-      
-      {error && (
-        <View style={styles.errorAlert}>
-          <ThemedText style={styles.errorAlertText}>{error}</ThemedText>
-        </View>
-      )}
-      
-      <ThemedText style={styles.instructions}>
-        Enter your new password below. Choose a strong password that is at least 6 characters.
-      </ThemedText>
-      
-      <TextInput
-        style={styles.input}
-        placeholder="New Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        editable={!loading}
-      />
-      
-      <TextInput
-        style={styles.input}
-        placeholder="Confirm New Password"
-        value={confirmPassword}
-        onChangeText={setConfirmPassword}
-        secureTextEntry
-        editable={!loading}
-      />
-      
-      <ThemedText style={styles.passwordHint}>
-        Your password should be at least 6 characters and include a mix of letters, numbers, and symbols for best security.
-      </ThemedText>
-      
-      <Pressable
-        style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleResetPassword}
-        disabled={loading}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}
       >
-        {loading ? (
-          <ActivityIndicator color="#fff" size="small" />
-        ) : (
-          <ThemedText style={styles.buttonText}>
-            Reset Password
-          </ThemedText>
-        )}
-      </Pressable>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.headerRow}>
+            <BackButton onPress={handleBackPress} />
+            <View style={{ flex: 1 }} /> {/* Spacer */}
+          </View>
+          
+          <Animated.View 
+            style={styles.iconContainer}
+            entering={FadeInDown.delay(200).springify()}
+          >
+            <View style={styles.iconCircle}>
+              <Feather name="lock" size={32} color={theme.colors.primary.main} />
+            </View>
+          </Animated.View>
+          
+          <Animated.View 
+            entering={FadeInDown.delay(300).springify()}
+            style={styles.contentCard}
+          >
+            <Card variant="elevated" style={styles.card}>
+              <CardContent>
+                <Heading2 style={styles.cardTitle}>Set New Password</Heading2>
+                
+                {error && (
+                  <View style={styles.errorContainer}>
+                    <Feather name="alert-circle" size={20} color={theme.colors.error.main} />
+                    <Body2 color={theme.colors.error.main} style={styles.errorText}>
+                      {error}
+                    </Body2>
+                  </View>
+                )}
+                
+                <Body1 style={styles.instructions}>
+                  Create a new password for your account. Choose a strong password that is 
+                  at least 6 characters long.
+                </Body1>
+                
+                <Input
+                  label="New Password"
+                  iconName="lock"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  placeholder="Enter new password"
+                  containerStyle={styles.input}
+                />
+                
+                <Input
+                  label="Confirm Password"
+                  iconName="check-circle"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry
+                  placeholder="Confirm new password"
+                  containerStyle={styles.input}
+                />
+                
+                <Caption style={styles.passwordHint}>
+                  For better security, use a mix of letters, numbers, and special characters.
+                </Caption>
+                
+                <Button
+                  variant="primary"
+                  size="large"
+                  fullWidth
+                  loading={loading}
+                  disabled={loading || !password || !confirmPassword}
+                  onPress={handleResetPassword}
+                  style={styles.resetButton}
+                >
+                  Reset Password
+                </Button>
+              </CardContent>
+            </Card>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ThemedView>
   );
 }
@@ -280,92 +358,105 @@ export default function ResetPasswordScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  scrollContent: {
     padding: 20,
+    flexGrow: 1,
   },
-  centerContent: {
-    justifyContent: 'center',
+  headerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  header: {
-    marginTop: 20,
     marginBottom: 20,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  instructions: {
-    fontSize: 16,
+  iconContainer: {
+    alignItems: 'center',
     marginBottom: 24,
+  },
+  iconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "rgba(46, 125, 50, 0.1)", // Using primary color with opacity
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  contentCard: {
+    width: '100%',
+    marginBottom: 32,
+  },
+  card: {
+    width: '100%',
+  },
+  cardTitle: {
     textAlign: 'center',
-    color: '#666',
-    lineHeight: 22,
+    marginBottom: 16,
   },
-  input: {
-    height: 48,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    marginBottom: 20,
-    paddingHorizontal: 16,
-    backgroundColor: '#fff',
-  },
-  button: {
-    backgroundColor: '#007AFF',
-    height: 48,
-    borderRadius: 8,
-    justifyContent: 'center',
+  errorContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#d32f2f',
-    marginBottom: 12,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
   },
   errorText: {
-    fontSize: 16,
+    flex: 1,
+    marginLeft: 8,
+  },
+  instructions: {
     textAlign: 'center',
-    color: '#666',
     marginBottom: 24,
-    paddingHorizontal: 20,
-    lineHeight: 22,
   },
-  errorIcon: {
-    fontSize: 50,
-    marginBottom: 20,
-  },
-  errorAlert: {
-    backgroundColor: '#ffebee',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 20,
-  },
-  errorAlertText: {
-    color: '#d32f2f',
-    textAlign: 'center',
+  input: {
+    marginBottom: 16,
   },
   passwordHint: {
-    fontSize: 14,
-    color: '#666',
-    fontStyle: 'italic',
-    marginBottom: 20,
     textAlign: 'center',
+    marginBottom: 24,
+    fontStyle: 'italic',
+  },
+  resetButton: {
+    marginBottom: 8,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(46, 125, 50, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  loadingText: {
+    textAlign: 'center',
+  },
+  errorValidationContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorTitle: {
+    textAlign: 'center',
+    marginBottom: 12,
+    color: '#d32f2f',
+  },
+  errorDescription: {
+    textAlign: 'center',
+    marginBottom: 24,
+    maxWidth: 300,
+  },
+  errorActionContainer: {
+    width: '100%',
+    maxWidth: 300,
   },
 });

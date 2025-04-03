@@ -2,26 +2,34 @@
 import { useState, useEffect } from "react";
 import {
   StyleSheet,
-  TextInput,
-  Pressable,
   Alert,
   View,
+  TouchableOpacity,
   Platform,
+  KeyboardAvoidingView,
+  ScrollView,
+  TextInput,
+  Text
 } from "react-native";
 import { Link, useRouter } from "expo-router";
 import { ThemedView } from "@/components/ThemedView";
-import { ThemedText } from "@/components/ThemedText";
+import { useTheme } from "@/lib/theme/theme";
 import { AuthService } from "@/lib/services/auth";
 import { supabase } from "@/lib/supabase/client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AppleSignInButton } from "@/components/ui/AppleSignInButton";
-import { GoogleSignInButton } from "@/components/ui/GoogleSignInButton";
+import { Feather } from '@expo/vector-icons';
+import { FontAwesome } from '@expo/vector-icons'; // Added for Apple icon
+import Animated, { 
+  FadeInDown,
+  FadeIn
+} from "react-native-reanimated";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const theme = useTheme();
 
   const handleAppleSignIn = async () => {
     try {
@@ -38,9 +46,7 @@ export default function LoginScreen() {
     }
   };
 
-  // Update this part in login.tsx (handleLogin function)
-
-const handleLogin = async () => {
+  const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert("Error", "Please fill in all fields");
       return;
@@ -98,102 +104,147 @@ const handleLogin = async () => {
     }
   };
 
-  // Add the test function
-  const testSupabaseSetup = async () => {
-    console.log("Testing Supabase setup...");
-
-    // Test 1: Check current session
-    const { data: sessionData, error: sessionError } =
-      await supabase.auth.getSession();
-    console.log("Current session:", sessionData, "Error:", sessionError);
-
-    // Test 2: Check auth event subscription
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log(
-        "Auth event:",
-        event,
-        "Session:",
-        session ? "exists" : "null"
-      );
-    });
-
-    // Test 3: Check storage persistence
-    try {
-      await AsyncStorage.setItem("test-key", "test-value");
-      const value = await AsyncStorage.getItem("test-key");
-      console.log(
-        "AsyncStorage test:",
-        value === "test-value" ? "working" : "failed"
-      );
-    } catch (e) {
-      console.log("AsyncStorage error:", e);
-    }
-  };
-
-  // Call the test function in useEffect
+  // For debugging
   useEffect(() => {
+    const testSupabaseSetup = async () => {
+      console.log("Testing Supabase setup...");
+      
+      // Check current session
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.getSession();
+      console.log("Current session:", sessionData, "Error:", sessionError);
+      
+      // Check storage persistence
+      try {
+        await AsyncStorage.setItem("test-key", "test-value");
+        const value = await AsyncStorage.getItem("test-key");
+        console.log("AsyncStorage test:", value === "test-value" ? "working" : "failed");
+      } catch (e) {
+        console.log("AsyncStorage error:", e);
+      }
+    };
+    
     testSupabaseSetup();
   }, []);
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedText style={styles.title}>Welcome Back</ThemedText>
-
-      <View style={styles.socialButtons}>
-        {Platform.OS === "ios" && (
-          <AppleSignInButton onPress={handleAppleSignIn} disabled={loading} />
-        )}
-        <GoogleSignInButton onPress={handleGoogleSignIn} disabled={loading} />
-      </View>
-
-      <View style={styles.divider}>
-        <View style={styles.dividerLine} />
-        <ThemedText style={styles.dividerText}>or</ThemedText>
-        <View style={styles.dividerLine} />
-      </View>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
-
-      <Pressable
-        style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleLogin}
-        disabled={loading}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}
       >
-        <ThemedText style={styles.buttonText}>
-          {loading ? "Signing in..." : "Sign In"}
-        </ThemedText>
-      </Pressable>
-
-      <Link href="/register" asChild>
-        <Pressable style={styles.linkButton}>
-          <ThemedText style={styles.linkText}>
-            Don't have an account? Create one
-          </ThemedText>
-        </Pressable>
-      </Link>
-
-      <Link href="/forgot-password" asChild>
-        <Pressable style={styles.linkButton}>
-          <ThemedText style={styles.linkText}>Forgot password?</ThemedText>
-        </Pressable>
-      </Link>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Animated.View 
+            style={styles.logoContainer}
+            entering={FadeInDown.delay(200).springify()}
+          >
+            <View style={styles.logoCircle}>
+              <Feather name="message-circle" size={40} color={theme.colors.primary.main} />
+            </View>
+            <Text style={styles.appName}>ChataBubble</Text>
+            <Text style={styles.tagline}>Speak languages with confidence</Text>
+          </Animated.View>
+          
+          <Animated.View
+            entering={FadeInDown.delay(300).springify()}
+            style={styles.formContainer}
+          >
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                placeholderTextColor="#A3A3A3"
+              />
+            </View>
+            
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                placeholderTextColor="#A3A3A3"
+              />
+            </View>
+            
+            <Link href="/forgot-password" asChild>
+              <TouchableOpacity style={styles.forgotPasswordLink}>
+                <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+              </TouchableOpacity>
+            </Link>
+            
+            <TouchableOpacity
+              style={[
+                styles.signInButton, 
+                loading && styles.signInButtonDisabled
+              ]}
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              <Text style={styles.signInButtonText}>
+                Sign In
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+          
+          <Animated.View
+            entering={FadeInDown.delay(400).springify()}
+            style={styles.dividerContainer}
+          >
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </Animated.View>
+          
+          <Animated.View
+            entering={FadeInDown.delay(500).springify()}
+            style={styles.socialButtonsContainer}
+          >
+            {Platform.OS === "ios" && (
+              <TouchableOpacity
+                style={styles.appleButton}
+                onPress={handleAppleSignIn}
+                disabled={loading}
+              >
+                <FontAwesome name="apple" size={20} color="#FFFFFF" />
+                <Text style={styles.appleButtonText}>Sign in with Apple</Text>
+              </TouchableOpacity>
+            )}
+            
+            <TouchableOpacity
+              style={styles.googleButton}
+              onPress={handleGoogleSignIn}
+              disabled={loading}
+            >
+              <View style={styles.googleIconContainer}>
+                <Text style={styles.googleIcon}>G</Text>
+              </View>
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
+            </TouchableOpacity>
+          </Animated.View>
+          
+          <Animated.View
+            entering={FadeIn.delay(600)}
+            style={styles.footer}
+          >
+            <Text style={styles.footerText}>Don't have an account?</Text>
+            <Link href="/register" asChild>
+              <TouchableOpacity>
+                <Text style={styles.createAccountText}>Create One</Text>
+              </TouchableOpacity>
+            </Link>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ThemedView>
   );
 }
@@ -201,90 +252,153 @@ const handleLogin = async () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    justifyContent: "center",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 32,
-    textAlign: "center",
-  },
-  socialButtons: {
-    marginBottom: 20,
-    gap: 12,
-  },
-  socialButton: {
-    height: 48,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#e1e1e1",
-  },
-  googleButton: {
     backgroundColor: "#fff",
   },
-  appleButton: {
-    backgroundColor: "#000",
+  keyboardAvoidingView: {
+    flex: 1,
   },
-  socialButtonText: {
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 40,
+    paddingTop: 40,
+    paddingBottom: 20,
+  },
+  logoContainer: {
+    alignItems: "center",
+    marginBottom: 40,
+  },
+  logoCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#F2F7F2", // Very light green
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  appName: {
+    fontSize: 28,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  tagline: {
+    textAlign: "center",
+    color: "#666",
+    fontSize: 16,
+  },
+  formContainer: {
+    width: "100%",
+    marginBottom: 30,
+  },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  input: {
+    height: 50,
+    width: "100%",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E0E0",
+    fontSize: 16,
+    color: "#333",
+  },
+  forgotPasswordLink: {
+    alignSelf: "flex-end",
+    marginBottom: 24,
+  },
+  forgotPasswordText: {
+    color: "#2E7D32", // Green
+    fontSize: 16,
+  },
+  signInButton: {
+    backgroundColor: "#2E7D32", // Green
+    height: 50,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  signInButtonDisabled: {
+    opacity: 0.7,
+  },
+  signInButtonText: {
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
   },
-  appleButtonText: {
-    color: "#fff",
-  },
-  googleButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  divider: {
+  dividerContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 30,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: "#e1e1e1",
+    backgroundColor: "#E0E0E0",
   },
   dividerText: {
     marginHorizontal: 10,
     color: "#666",
+    fontSize: 16,
   },
-  input: {
-    height: 48,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    marginBottom: 16,
-    paddingHorizontal: 16,
-    backgroundColor: "#fff",
+  socialButtonsContainer: {
+    marginBottom: 30,
+    gap: 16,
   },
-  button: {
-    backgroundColor: "#007AFF",
-    height: 48,
-    borderRadius: 8,
+  appleButton: {
+    backgroundColor: "#000000",
+    height: 50,
+    borderRadius: 10,
+    flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 16,
   },
-  buttonDisabled: {
-    opacity: 0.5,
+  appleButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "500",
+    marginLeft: 8,
   },
-  buttonText: {
-    color: "#fff",
+  googleButton: {
+    backgroundColor: "#FFFFFF",
+    height: 50,
+    borderRadius: 10,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  googleIconContainer: {
+    width: 20,
+    height: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  googleIcon: {
+    color: "#EA4335", // Google red
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  googleButtonText: {
+    color: "#333333",
+    fontSize: 16,
+    fontWeight: "500",
+    marginLeft: 8,
+  },
+  footer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  footerText: {
+    fontSize: 16,
+    color: "#666",
+  },
+  createAccountText: {
     fontSize: 16,
     fontWeight: "600",
-  },
-  linkButton: {
-    marginTop: 16,
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  linkText: {
-    color: "#007AFF",
-    fontSize: 16,
+    color: "#2E7D32", // Green
+    marginLeft: 5,
   },
 });
