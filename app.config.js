@@ -9,17 +9,15 @@ export default {
     ios: {
       bundleIdentifier: "com.chatabubble.mobile"
     },
-    // Add explicit deep linking configuration
     plugins: [
-      [
-        "expo-router",
-        {
-          // Properly configure root routes for deep linking
-          root: "./app",
-        },
+        [
+          "expo-router",
+          {
+            root: "./app",
+          },
+        ],
+        "expo-font"
       ],
-    ],
-    // Define specific paths for deep linking
     web: {
       bundler: "metro"
     },

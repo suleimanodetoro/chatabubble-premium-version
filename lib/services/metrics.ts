@@ -1,4 +1,4 @@
-// lib/services/metrics.ts
+// lib/services/metrics.ts - Removed streak and time metrics
 import { supabase } from '@/lib/supabase/client';
 import { Session, Language } from '@/types';
 
@@ -14,9 +14,7 @@ interface DBSession {
   updated_at: string;
   status: 'active' | 'completed' | 'saved';
   metrics: {
-    duration?: number;
     messageCount?: number;
-    lastUpdated?: number;
   };
   scenario?: {
     id: string;
@@ -29,18 +27,14 @@ interface DBSession {
 interface UserMetrics {
   totalSessions: number;
   completedSessions: number;
-  totalMinutesPracticed: number;
   activeLanguages: number;
   languageProgress: Record<string, {
     sessionsCompleted: number;
-    totalDuration: number;
     lastPracticed: string;
     level: 'beginner' | 'intermediate' | 'advanced';
     recentSessions: Session[];
   }>;
   recentSessions: Session[];
-  streak: number;
-  lastPracticed: string | null;
 }
 
 export class MetricsService {
@@ -87,13 +81,9 @@ export class MetricsService {
       const metrics: UserMetrics = {
         totalSessions: transformedSessions.length,
         completedSessions: transformedSessions.filter(s => s.status === 'completed').length,
-        totalMinutesPracticed: transformedSessions.reduce((total, session) => 
-          total + (session.metrics?.duration || 0) / 60000, 0),
         activeLanguages: Object.keys(profile.current_levels || {}).length,
         languageProgress: {},
         recentSessions: transformedSessions.slice(0, 5),
-        streak: profile.daily_streak || 0,
-        lastPracticed: profile.last_practice
       };
 
       // Calculate per-language metrics
@@ -107,7 +97,6 @@ export class MetricsService {
         if (!metrics.languageProgress[langCode]) {
           metrics.languageProgress[langCode] = {
             sessionsCompleted: 0,
-            totalDuration: 0,
             lastPracticed: session.startTime.toString(),
             level: profile.current_levels?.[langCode] || 'beginner',
             recentSessions: []
@@ -116,7 +105,6 @@ export class MetricsService {
 
         const langMetrics = metrics.languageProgress[langCode];
         langMetrics.sessionsCompleted++;
-        langMetrics.totalDuration += session.metrics?.duration || 0;
         
         if (langMetrics.recentSessions.length < 3) {
           langMetrics.recentSessions.push(session);
@@ -146,7 +134,7 @@ export class MetricsService {
       if (sessionsCompleted > 20) level = 'advanced';
       else if (sessionsCompleted > 10) level = 'intermediate';
 
-      // Update profile with new level and streak
+      // Update profile with new level only (removed streak updates)
       await supabase
         .from('profiles')
         .update({
@@ -158,7 +146,6 @@ export class MetricsService {
             }
           },
           last_practice: new Date().toISOString(),
-          daily_streak: this.calculateStreak(metrics.lastPracticed)
         })
         .eq('id', session.userId);
 
@@ -166,17 +153,5 @@ export class MetricsService {
       console.error('Error updating session metrics:', error);
       throw error;
     }
-  }
-
-  private static calculateStreak(lastPracticed: string | null): number {
-    if (!lastPracticed) return 1;
-    
-    const now = new Date();
-    const last = new Date(lastPracticed);
-    const daysDiff = Math.floor((now.getTime() - last.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (daysDiff === 0) return 1; // First day
-    if (daysDiff === 1) return 2; // Next day
-    return 0; // Break in streak
   }
 }

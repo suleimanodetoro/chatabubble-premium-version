@@ -34,7 +34,7 @@ export const ChatBubble = memo(function ChatBubble({
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isTranslationVisible, setIsTranslationVisible] = useState(false);
   const translationOpacity = useSharedValue(0);
-  const translationHeight = useSharedValue(0);
+  // --- REMOVED translationHeight ---
   const isUser = message.sender === "user";
 
   // Cleanup speech when component unmounts
@@ -50,12 +50,12 @@ export const ChatBubble = memo(function ChatBubble({
   useEffect(() => {
     if (isTranslationVisible) {
       translationOpacity.value = withTiming(1, { duration: 300 });
-      translationHeight.value = withTiming(40, { duration: 300 });
+      // --- REMOVED height animation ---
     } else {
       translationOpacity.value = withTiming(0, { duration: 200 });
-      translationHeight.value = withTiming(0, { duration: 200 });
+      // --- REMOVED height animation ---
     }
-  }, [isTranslationVisible]);
+  }, [isTranslationVisible, translationOpacity]);
 
   // Speech handling
   const handleSpeak = useCallback(async () => {
@@ -278,8 +278,8 @@ export const ChatBubble = memo(function ChatBubble({
   const translationStyle = useAnimatedStyle(() => {
     return {
       opacity: translationOpacity.value,
-      maxHeight: translationHeight.value,
-      overflow: 'hidden',
+      // --- REMOVED maxHeight ---
+      overflow: 'hidden', // Keep for smooth opacity fade if text content shifts slightly
     };
   });
 
@@ -307,14 +307,17 @@ export const ChatBubble = memo(function ChatBubble({
             {message.content.original}
           </Body1>
           
-          <Animated.View style={[styles.translationContainer, translationStyle]}>
-            <Body2 
-              style={styles.translatedText} 
-              color={isUser ? theme.colors.primary.light : theme.colors.text.secondary}
-            >
-              {message.content.translated}
-            </Body2>
-          </Animated.View>
+          {/* Only render translation container if there's text */}
+          {message.content.translated && message.content.translated.trim() !== "" && (
+            <Animated.View style={[styles.translationContainer, translationStyle]}>
+              <Body2 
+                style={styles.translatedText} 
+                color={isUser ? theme.colors.primary.light : theme.colors.text.secondary}
+              >
+                {message.content.translated}
+              </Body2>
+            </Animated.View>
+          )}
           
           <View style={styles.messageFooter}>
             {message.isEdited && (
@@ -326,16 +329,19 @@ export const ChatBubble = memo(function ChatBubble({
               </Caption>
             )}
             
-            <TouchableOpacity 
-              style={styles.translationToggle}
-              onPress={toggleTranslation}
-            >
-              <Caption
-                color={isUser ? theme.colors.primary.light : theme.colors.text.hint}
+            {/* Conditionally render toggle only if there is translated text */}
+            {message.content.translated && message.content.translated.trim() !== "" && (
+              <TouchableOpacity 
+                style={styles.translationToggle}
+                onPress={toggleTranslation}
               >
-                {isTranslationVisible ? "Hide translation" : "Show translation"}
-              </Caption>
-            </TouchableOpacity>
+                <Caption
+                  color={isUser ? theme.colors.primary.light : theme.colors.text.hint}
+                >
+                  {isTranslationVisible ? "Hide translation" : "Show translation"}
+                </Caption>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -406,13 +412,15 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   messageContent: {
-    marginRight: 28,
+    marginRight: 32, // Increased slightly for better layout
   },
   originalText: {
     marginBottom: 4,
   },
   translationContainer: {
     marginTop: 4,
+    // Ensure overflow is hidden for opacity animation
+    overflow: 'hidden',
   },
   translatedText: {
     fontStyle: 'italic',
@@ -422,12 +430,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 4,
+    flexWrap: 'wrap', // Allow toggle button to wrap if needed
   },
   editedText: {
     marginRight: 8,
+    lineHeight: 16, // Ensure proper alignment with toggle
   },
   translationToggle: {
-    padding: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 4,
   },
   speakerButton: {
     position: "absolute",
@@ -446,5 +457,6 @@ const styles = StyleSheet.create({
   timestamp: {
     marginTop: 2,
     marginHorizontal: 4,
+    // Parent container handles alignment
   },
 });

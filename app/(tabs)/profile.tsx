@@ -109,115 +109,125 @@ const ProfileHeader = ({
 };
 
 const ProgressCard = ({ metrics, isLoading }: { metrics: any; isLoading: boolean }) => {
-  const theme = useTheme();
-  const rotation = useSharedValue(0);
-  const language = Object.keys(metrics?.languageProgress || {})[0];
-  const languageData = language ? metrics?.languageProgress[language] : null;
-  
-  const progressBarWidth = useSharedValue(0);
-  
-  // Set progress bar animation
-  useEffect(() => {
-    if (!isLoading && languageData) {
-      const sessionsCompleted = languageData.sessionsCompleted || 0;
-      const progress = Math.min(sessionsCompleted / 20, 1); // 20 sessions = 100%
-      
-      progressBarWidth.value = withSpring(progress, {
-        damping: 20,
-        stiffness: 90
-      });
-    }
-  }, [isLoading, languageData]);
-  
-  const progressStyle = useAnimatedStyle(() => {
-    return {
-      width: `${progressBarWidth.value * 100}%`
-    };
-  });
-  
-  const rotatableStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ rotate: `${rotation.value}deg` }]
-    };
-  });
-  
-  const handleRotate = () => {
-    rotation.value = withSpring(rotation.value + 360, {
-      damping: 15,
-      stiffness: 60
-    });
-  };
-
-  return (
-    <Card variant="elevated" style={styles.progressCard}>
-      <CardHeader
-        title="Your Progress"
-        action={
-          <TouchableOpacity onPress={handleRotate} style={styles.refreshButton}>
-            <Animated.View style={rotatableStyle}>
-              <Feather name="refresh-cw" size={18} color={theme.colors.primary.main} />
-            </Animated.View>
-          </TouchableOpacity>
-        }
-      />
-      <CardContent>
-        <View style={styles.statsContainer}>
-          <View style={styles.statItem}>
-            <Heading2 color={theme.colors.primary.main}>
-              {isLoading ? "--" : metrics?.totalSessions || 0}
-            </Heading2>
-            <Caption>Total Sessions</Caption>
-          </View>
-          
-          <View style={styles.statDivider} />
-          
-          <View style={styles.statItem}>
-            <Heading2 color={theme.colors.primary.main}>
-              {isLoading ? "--" : Math.round(metrics?.totalMinutesPracticed || 0)}
-            </Heading2>
-            <Caption>Minutes</Caption>
-          </View>
-          
-          <View style={styles.statDivider} />
-          
-          <View style={styles.statItem}>
-            <View style={styles.streakContainer}>
-              <Heading2 color={theme.colors.warning.main}>
-                {isLoading ? "--" : metrics?.streak || 0}
-              </Heading2>
-              <Feather name="zap" size={18} color={theme.colors.warning.main} />
-            </View>
-            <Caption>Day Streak</Caption>
-          </View>
-        </View>
+    const theme = useTheme();
+    const rotation = useSharedValue(0);
+    const language = Object.keys(metrics?.languageProgress || {})[0];
+    const languageData = language ? metrics?.languageProgress[language] : null;
+    
+    const progressBarWidth = useSharedValue(0);
+    
+    // Set progress bar animation
+    useEffect(() => {
+      if (!isLoading && languageData) {
+        const sessionsCompleted = languageData.sessionsCompleted || 0;
+        const progress = Math.min(sessionsCompleted / 20, 1); // 20 sessions = 100%
         
-        {language && (
-          <View style={styles.languageProgressContainer}>
-            <View style={styles.languageProgressHeader}>
-              <Body1 weight="semibold">{language}</Body1>
-              <Caption>{languageData?.level || 'beginner'}</Caption>
+        progressBarWidth.value = withSpring(progress, {
+          damping: 20,
+          stiffness: 90
+        });
+      }
+    }, [isLoading, languageData]);
+    
+    const progressStyle = useAnimatedStyle(() => {
+      return {
+        width: `${progressBarWidth.value * 100}%`
+      };
+    });
+    
+    const rotatableStyle = useAnimatedStyle(() => {
+      return {
+        transform: [{ rotate: `${rotation.value}deg` }]
+      };
+    });
+    
+    const handleRotate = () => {
+      rotation.value = withSpring(rotation.value + 360, {
+        damping: 15,
+        stiffness: 60
+      });
+    };
+    
+    // Fix: Ensure we're using string values for Caption content, not objects
+    const getLevelString = (levelData: any): string => {
+      if (!levelData) return 'beginner';
+      // If levelData is already a string, return it
+      if (typeof levelData === 'string') return levelData;
+      // If it's an object with a name property, return that
+      if (typeof levelData === 'object' && levelData.name) return levelData.name;
+      // Default fallback
+      return 'beginner';
+    };
+  
+    return (
+      <Card variant="elevated" style={styles.progressCard}>
+        <CardHeader
+          title="Your Progress"
+          action={
+            <TouchableOpacity onPress={handleRotate} style={styles.refreshButton}>
+              <Animated.View style={rotatableStyle}>
+                <Feather name="refresh-cw" size={18} color={theme.colors.primary.main} />
+              </Animated.View>
+            </TouchableOpacity>
+          }
+        />
+        <CardContent>
+          <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+              <Heading2 color={theme.colors.primary.main}>
+                {isLoading ? "--" : metrics?.totalSessions || 0}
+              </Heading2>
+              <Caption>Total Sessions</Caption>
             </View>
             
-            <View style={styles.progressBarContainer}>
-              <Animated.View 
-                style={[
-                  styles.progressBar,
-                  { backgroundColor: theme.colors.primary.main },
-                  progressStyle
-                ]} 
-              />
+            <View style={styles.statDivider} />
+            
+            <View style={styles.statItem}>
+              <Heading2 color={theme.colors.primary.main}>
+                {isLoading ? "--" : Math.round(metrics?.totalMinutesPracticed || 0)}
+              </Heading2>
+              <Caption>Minutes</Caption>
             </View>
             
-            <View style={styles.progressStats}>
-              <Caption>{languageData?.sessionsCompleted || 0} sessions</Caption>
-              <Caption>{Math.round((languageData?.totalDuration || 0) / 60000)} minutes</Caption>
+            <View style={styles.statDivider} />
+            
+            <View style={styles.statItem}>
+              {/* Removed streak UI */}
+              <Heading2 color={theme.colors.primary.main}>
+                {isLoading ? "--" : Object.keys(metrics?.languageProgress || {}).length}
+              </Heading2>
+              <Caption>Languages</Caption>
             </View>
           </View>
-        )}
-      </CardContent>
-    </Card>
-  );
-};
+          
+          {language && (
+            <View style={styles.languageProgressContainer}>
+              <View style={styles.languageProgressHeader}>
+                <Body1 weight="semibold">{language}</Body1>
+                {/* Fix: Ensure we never pass an object to Caption */}
+                <Caption>{getLevelString(languageData?.level)}</Caption>
+              </View>
+              
+              <View style={styles.progressBarContainer}>
+                <Animated.View 
+                  style={[
+                    styles.progressBar,
+                    { backgroundColor: theme.colors.primary.main },
+                    progressStyle
+                  ]} 
+                />
+              </View>
+              
+              <View style={styles.progressStats}>
+                <Caption>{languageData?.sessionsCompleted || 0} sessions</Caption>
+                <Caption>{Math.round((languageData?.totalDuration || 0) / 60000)} minutes</Caption>
+              </View>
+            </View>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
 
 const SettingsRow = ({ 
   icon, 

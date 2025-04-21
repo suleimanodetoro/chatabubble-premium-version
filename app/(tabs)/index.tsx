@@ -1,5 +1,6 @@
-// app/(tabs)/index.tsx
-import React, { useState, useEffect } from "react";
+// app/(tabs)/index.tsx - Removed streak UI
+
+import React, { useState, useEffect, useCallback } from "react";
 import { StyleSheet, ScrollView, View, Pressable, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -16,21 +17,17 @@ import { Feather } from '@expo/vector-icons';
 interface UserMetrics {
   totalSessions: number;
   completedSessions: number;
-  totalMinutesPracticed: number;
   activeLanguages: number;
   languageProgress: Record<
     string,
     {
       sessionsCompleted: number;
-      totalDuration: number;
       lastPracticed: string;
       level: "beginner" | "intermediate" | "advanced";
       recentSessions: Session[];
     }
   >;
   recentSessions: Session[];
-  streak: number;
-  lastPracticed: string | null;
 }
 
 export default function HomeScreen() {
@@ -103,17 +100,7 @@ export default function HomeScreen() {
       <View style={styles.welcomeHeader}>
         <Heading1>{greeting}, {user?.name || "there"}!</Heading1>
         
-        {(metrics?.streak ?? 0) > 0 && (
-          <View style={styles.streakContainer}>
-            <Feather name="zap" size={20} color={theme.colors.warning.main} />
-            <Body1 
-              style={styles.streakText}
-              color={theme.colors.warning.main}
-            >
-              {metrics?.streak} day streak
-            </Body1>
-          </View>
-        )}
+        {/* Removed streak UI */}
       </View>
     );
   };
@@ -194,18 +181,18 @@ export default function HomeScreen() {
             
             <View style={styles.statItem}>
               <Heading2 color={theme.colors.primary.main}>
-                {isLoading ? "--" : Math.round(metrics?.totalMinutesPracticed || 0)}
+                {isLoading ? "--" : Object.keys(metrics?.languageProgress || {}).length}
               </Heading2>
-              <Caption>Minutes</Caption>
+              <Caption>Languages</Caption>
             </View>
             
             <View style={styles.statDivider} />
             
             <View style={styles.statItem}>
               <Heading2 color={theme.colors.primary.main}>
-                {isLoading ? "--" : Object.keys(metrics?.languageProgress || {}).length}
+                {isLoading ? "--" : metrics?.completedSessions || 0}
               </Heading2>
-              <Caption>Languages</Caption>
+              <Caption>Completed</Caption>
             </View>
           </View>
         </CardContent>
@@ -304,13 +291,6 @@ export default function HomeScreen() {
                       <Feather name="message-circle" size={14} color={theme.colors.text.secondary} />
                       <Caption style={styles.sessionStatText}>
                         {session.messages?.length || 0} messages
-                      </Caption>
-                    </View>
-                    
-                    <View style={styles.sessionStat}>
-                      <Feather name="clock" size={14} color={theme.colors.text.secondary} />
-                      <Caption style={styles.sessionStatText}>
-                        {Math.round((session.metrics?.duration || 0) / 60000)}m
                       </Caption>
                     </View>
                   </View>

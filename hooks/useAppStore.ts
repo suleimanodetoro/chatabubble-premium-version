@@ -1,4 +1,5 @@
-// hooks/useAppStore.ts
+// hooks/useAppStore.ts - Removed streak state
+
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -159,7 +160,7 @@ export const useAppStore = create<AppState>()(
         activeSessions: state.activeSessions,
         source_language: state.source_language,
         user: state.user,
-      }), // Removed isPremium from partialize
+      }),
     }
   )
 );
