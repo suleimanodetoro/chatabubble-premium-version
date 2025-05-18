@@ -11,11 +11,15 @@ import { SpeechService } from "@/lib/services/speech";
 import { Feather } from '@expo/vector-icons';
 import { generateId } from '@/lib/utils/ids';
 import { StorageService } from '@/lib/services/storage';
-import Animated, { 
-  useAnimatedStyle, 
-  useSharedValue, 
-  withTiming 
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+  runOnJS, // Import runOnJS (though not used in this version, kept for potential future use)
 } from "react-native-reanimated";
+
+// Define a reasonable max height for the translation text area
+const MAX_TRANSLATION_HEIGHT = 200; // Adjust as needed
 
 export const ChatBubble = memo(function ChatBubble({
   message,
@@ -28,39 +32,51 @@ export const ChatBubble = memo(function ChatBubble({
   const target_language = useAppStore((state) => state.target_language);
   const currentScenario = useAppStore((state) => state.currentScenario);
   const setCurrentSession = useAppStore((state) => state.setCurrentSession);
-  
+
   const theme = useTheme();
 
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isTranslationVisible, setIsTranslationVisible] = useState(false);
   const translationOpacity = useSharedValue(0);
-  // --- REMOVED translationHeight ---
+  const translationMaxHeight = useSharedValue(0);
+
   const isUser = message.sender === "user";
 
   // Cleanup speech when component unmounts
   useEffect(() => {
     return () => {
+      // Directly call stop if speaking, assuming SpeechService.stop is safe to call from cleanup
       if (isSpeaking) {
         SpeechService.stop();
       }
     };
-  }, [isSpeaking]);
+  }, [isSpeaking]); // Dependency remains isSpeaking
 
   // Handle translation visibility change
   useEffect(() => {
-    if (isTranslationVisible) {
-      translationOpacity.value = withTiming(1, { duration: 300 });
-      // --- REMOVED height animation ---
-    } else {
-      translationOpacity.value = withTiming(0, { duration: 200 });
-      // --- REMOVED height animation ---
+    const targetOpacity = isTranslationVisible ? 1 : 0;
+    const targetMaxHeight = isTranslationVisible ? MAX_TRANSLATION_HEIGHT : 0;
+
+    translationOpacity.value = withTiming(targetOpacity, { duration: 250 });
+    translationMaxHeight.value = withTiming(targetMaxHeight, { duration: 300 });
+
+  }, [isTranslationVisible, translationOpacity, translationMaxHeight]);
+
+  // --- MOVED handleStop BEFORE handleSpeak ---
+  // Handle stop
+  const handleStop = useCallback(async () => {
+     try {
+      await SpeechService.stop();
+    } finally {
+      // Ensure state is updated correctly
+      setIsSpeaking(false);
     }
-  }, [isTranslationVisible, translationOpacity]);
+  }, []); // Empty dependency array is correct here
 
   // Speech handling
   const handleSpeak = useCallback(async () => {
-    if (isSpeaking) {
-      await handleStop();
+     if (isSpeaking) {
+      await handleStop(); // Now handleStop is declared above
       return;
     }
 
@@ -73,24 +89,18 @@ export const ChatBubble = memo(function ChatBubble({
         return;
       }
 
-      setIsSpeaking(true);
+      setIsSpeaking(true); // Set state immediately
       await SpeechService.speak(textToSpeak, languageToSpeak);
     } catch (error) {
       console.error("Speech error:", error);
       Alert.alert("Speech Error", "Unable to play speech. Please try again.");
     } finally {
+      // Ensure state is updated correctly even if SpeechService call fails internally
       setIsSpeaking(false);
     }
-  }, [message.content.original, isUser, source_language, currentSession?.target_language, isSpeaking]);
+    // Dependencies: handleStop is now stable due to its empty dependency array
+  }, [message.content.original, isUser, source_language, currentSession?.target_language, isSpeaking, handleStop]);
 
-  const handleStop = useCallback(async () => {
-    try {
-      await SpeechService.stop();
-    } finally {
-      setIsSpeaking(false);
-    }
-  }, []);
-  
   const toggleTranslation = () => {
     setIsTranslationVisible(!isTranslationVisible);
   };
@@ -98,14 +108,14 @@ export const ChatBubble = memo(function ChatBubble({
   // Message editing functionality
   const handleEdit = useCallback(
     async (editType: "original" | "translation") => {
-      if (!target_language || !currentScenario) {
+       if (!target_language || !currentScenario) {
         console.log('Missing targetLanguage or currentScenario:', { target_language, currentScenario });
         return;
       }
-  
+
       const textToEdit =
         editType === "original" ? message.content.original : message.content.translated;
-  
+
       Alert.prompt(
         "Edit Message",
         `Edit ${editType === "original" ? "message" : "translation"}:`,
@@ -115,16 +125,16 @@ export const ChatBubble = memo(function ChatBubble({
             text: "Save",
             onPress: async (newText?: string) => {
               if (!newText?.trim()) return;
-  
+
               dispatch({ type: "SET_LOADING", payload: true });
-  
+
               try {
                 // Get the index of the current message
                 const messageIndex = state.messages.findIndex(m => m.id === message.id);
                 if (messageIndex === -1) return;
-  
+
                 let updatedMessage: ChatMessage;
-  
+
                 if (message.sender === 'assistant') {
                   if (editType === 'translation') {
                     // If editing English translation of AI message, translate to target language
@@ -163,7 +173,7 @@ export const ChatBubble = memo(function ChatBubble({
                     newText,
                     editType === "original" ? target_language.name : "English"
                   );
-  
+
                   updatedMessage = {
                     ...message,
                     content: {
@@ -174,17 +184,17 @@ export const ChatBubble = memo(function ChatBubble({
                     sender: message.sender as "user",
                   };
                 }
-  
+
                 // Update messages list
                 const newMessageList = state.messages.slice(0, messageIndex + 1);
                 newMessageList[messageIndex] = updatedMessage;
-  
+
                 // Dispatch update
                 dispatch({
                   type: 'LOAD_MESSAGES',
                   payload: newMessageList
                 });
-  
+
                 // Save the updated messages to storage
                 if (currentSession) {
                   const updatedSession = {
@@ -195,7 +205,7 @@ export const ChatBubble = memo(function ChatBubble({
                   await StorageService.saveSession(updatedSession);
                   setCurrentSession(updatedSession);
                 }
-  
+
                 // Generate new AI response for edited user messages
                 if (message.sender === 'user') {
                   const aiResponse = await OpenAIService.generateChatCompletion(
@@ -203,12 +213,12 @@ export const ChatBubble = memo(function ChatBubble({
                     currentScenario,
                     target_language.name
                   );
-  
+
                   const translatedResponse = await OpenAIService.translateText(
                     aiResponse,
                     'English'
                   );
-  
+
                   const newAiMessage: ChatMessage = {
                     id: generateId(),
                     content: {
@@ -219,11 +229,11 @@ export const ChatBubble = memo(function ChatBubble({
                     timestamp: Date.now(),
                     isEdited: false
                   };
-  
+
                   // Add AI response and update storage
                   const finalMessageList = [...newMessageList, newAiMessage];
                   dispatch({ type: 'ADD_MESSAGE', payload: newAiMessage });
-  
+
                   if (currentSession) {
                     const finalSession = {
                       ...currentSession,
@@ -234,7 +244,7 @@ export const ChatBubble = memo(function ChatBubble({
                     setCurrentSession(finalSession);
                   }
                 }
-  
+
               } catch (error) {
                 console.error('Edit error:', error);
                 Alert.alert("Error", "Failed to save edit: " + (error as Error).message);
@@ -251,8 +261,9 @@ export const ChatBubble = memo(function ChatBubble({
     [message, target_language, dispatch, state.messages, currentScenario, currentSession, setCurrentSession]
   );
 
+  // Handle long press
   const handleLongPress = useCallback(() => {
-    Alert.alert("Edit Message", "What would you like to edit?", [
+     Alert.alert("Edit Message", "What would you like to edit?", [
       {
         text: isUser ? "Edit My Message" : "Edit Original Text",
         onPress: () => handleEdit("original"),
@@ -269,7 +280,7 @@ export const ChatBubble = memo(function ChatBubble({
   const backgroundColor = isUser
     ? theme.colors.primary.main
     : theme.colors.background.paper;
-  
+
   const textColor = isUser
     ? theme.colors.primary.contrast
     : theme.colors.text.primary;
@@ -278,23 +289,23 @@ export const ChatBubble = memo(function ChatBubble({
   const translationStyle = useAnimatedStyle(() => {
     return {
       opacity: translationOpacity.value,
-      // --- REMOVED maxHeight ---
-      overflow: 'hidden', // Keep for smooth opacity fade if text content shifts slightly
+      maxHeight: translationMaxHeight.value, // Use animated maxHeight
+      overflow: 'hidden', // Crucial for height animation
     };
   });
 
   return (
-    <Pressable 
+    <Pressable
       style={[
-        styles.container, 
+        styles.container,
         isUser ? styles.userContainer : styles.assistantContainer
-      ]} 
+      ]}
       onLongPress={handleLongPress}
     >
       <View
         style={[
           styles.bubble,
-          { 
+          {
             backgroundColor,
             borderColor: isUser ? 'transparent' : theme.colors.divider,
           },
@@ -306,19 +317,20 @@ export const ChatBubble = memo(function ChatBubble({
           <Body1 style={styles.originalText} color={textColor}>
             {message.content.original}
           </Body1>
-          
+
           {/* Only render translation container if there's text */}
           {message.content.translated && message.content.translated.trim() !== "" && (
+            // Apply animated style here
             <Animated.View style={[styles.translationContainer, translationStyle]}>
-              <Body2 
-                style={styles.translatedText} 
+              <Body2
+                style={styles.translatedText}
                 color={isUser ? theme.colors.primary.light : theme.colors.text.secondary}
               >
                 {message.content.translated}
               </Body2>
             </Animated.View>
           )}
-          
+
           <View style={styles.messageFooter}>
             {message.isEdited && (
               <Caption
@@ -328,10 +340,10 @@ export const ChatBubble = memo(function ChatBubble({
                 edited
               </Caption>
             )}
-            
+
             {/* Conditionally render toggle only if there is translated text */}
             {message.content.translated && message.content.translated.trim() !== "" && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.translationToggle}
                 onPress={toggleTranslation}
               >
@@ -350,22 +362,22 @@ export const ChatBubble = memo(function ChatBubble({
           onPress={handleSpeak}
         >
           {isSpeaking ? (
-            <Feather 
-              name="square" 
-              size={16} 
-              color={isUser ? theme.colors.primary.contrast : theme.colors.primary.main} 
+            <Feather
+              name="square"
+              size={16}
+              color={isUser ? theme.colors.primary.contrast : theme.colors.primary.main}
             />
           ) : (
-            <Feather 
-              name="volume-2" 
-              size={16} 
-              color={isUser ? theme.colors.primary.contrast : theme.colors.primary.main} 
+            <Feather
+              name="volume-2"
+              size={16}
+              color={isUser ? theme.colors.primary.contrast : theme.colors.primary.main}
             />
           )}
         </TouchableOpacity>
       </View>
-      
-      <Caption 
+
+      <Caption
         style={styles.timestamp}
         color={theme.colors.text.hint}
       >
@@ -375,6 +387,7 @@ export const ChatBubble = memo(function ChatBubble({
   );
 });
 
+// Styles
 const styles = StyleSheet.create({
   container: {
     width: "100%",
@@ -412,15 +425,14 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   messageContent: {
-    marginRight: 32, // Increased slightly for better layout
+    marginRight: 32, // Space for speaker button
   },
   originalText: {
     marginBottom: 4,
   },
   translationContainer: {
     marginTop: 4,
-    // Ensure overflow is hidden for opacity animation
-    overflow: 'hidden',
+    // overflow: 'hidden' is handled by animated style now
   },
   translatedText: {
     fontStyle: 'italic',
@@ -430,11 +442,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 4,
-    flexWrap: 'wrap', // Allow toggle button to wrap if needed
+    flexWrap: 'wrap',
   },
   editedText: {
     marginRight: 8,
-    lineHeight: 16, // Ensure proper alignment with toggle
+    lineHeight: 16,
   },
   translationToggle: {
     paddingVertical: 2,
@@ -457,6 +469,5 @@ const styles = StyleSheet.create({
   timestamp: {
     marginTop: 2,
     marginHorizontal: 4,
-    // Parent container handles alignment
   },
 });

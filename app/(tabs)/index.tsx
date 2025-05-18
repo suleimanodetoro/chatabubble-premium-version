@@ -1,33 +1,31 @@
-// app/(tabs)/index.tsx - Removed streak UI
-
+// app/(tabs)/index.tsx
 import React, { useState, useEffect, useCallback } from "react";
-import { StyleSheet, ScrollView, View, Pressable, ActivityIndicator } from "react-native";
+import { StyleSheet, ScrollView, View, Pressable, ActivityIndicator, Alert, RefreshControl } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppStore } from "@/hooks/useAppStore";
 import { MetricsService } from "@/lib/services/metrics";
-import { Session } from "@/types";
+import { Session, Scenario } from "@/types";
 import { useTheme } from "@/lib/theme/theme";
-import { Heading1, Heading2, Heading3, Body1, Body2, DisplayText, Caption } from "@/components/ui/Typography";
+import { Heading1, Heading2, Heading3, Body1, Body2, Caption } from "@/components/ui/Typography";
 import { Card, CardHeader, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Feather } from '@expo/vector-icons';
 
-// Add proper typing for metrics
 interface UserMetrics {
-  totalSessions: number;
-  completedSessions: number;
-  activeLanguages: number;
-  languageProgress: Record<
+  totalSessions?: number;
+  completedSessions?: number;
+  activeLanguages?: number;
+  languageProgress?: Record<
     string,
     {
       sessionsCompleted: number;
       lastPracticed: string;
       level: "beginner" | "intermediate" | "advanced";
-      recentSessions: Session[];
+      recentSessions?: Session[]; // Make recentSessions optional here
     }
   >;
-  recentSessions: Session[];
+  recentSessions?: Session[]; // Make recentSessions optional
 }
 
 export default function HomeScreen() {
@@ -35,55 +33,67 @@ export default function HomeScreen() {
   const router = useRouter();
   const [metrics, setMetrics] = useState<UserMetrics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const theme = useTheme();
-  const { setCurrentScenario, setCurrentSession, saveSession } = useAppStore();
+  const { setCurrentScenario, setCurrentSession } = useAppStore();
+
+  const loadMetrics = useCallback(async () => {
+    if (!user?.id) {
+      console.log("HomeScreen: No user ID found, skipping metrics load.");
+      setMetrics(null); // Clear previous metrics
+      setIsLoading(false);
+      setIsRefreshing(false);
+      return;
+    }
+    console.log(`HomeScreen: Loading metrics for user: ${user.id}`);
+    if(!isRefreshing) setIsLoading(true);
+
+    try {
+      const userMetrics = await MetricsService.getUserMetrics(user.id);
+      console.log("HomeScreen: Loaded metrics:", userMetrics);
+      setMetrics(userMetrics);
+    } catch (error) {
+      console.error("HomeScreen: Error loading metrics:", error);
+      Alert.alert("Error", "Could not load your progress data. Please try again.");
+      setMetrics(null); // Clear metrics on error
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [user?.id, isRefreshing]); // Added isRefreshing
 
   useEffect(() => {
     loadMetrics();
-  }, [user?.id]);
+  }, [loadMetrics]); // loadMetrics is memoized
 
-  const loadMetrics = async () => {
-    if (!user?.id) {
-      setIsLoading(false);
+  const onRefresh = useCallback(() => {
+    console.log("HomeScreen: Refreshing metrics...");
+    setIsRefreshing(true);
+    loadMetrics(); // loadMetrics will set isRefreshing to false
+  }, [loadMetrics]);
+
+
+  const handleContinueSession = async (session: Session | null | undefined) => {
+    if (!session || !session.id || !session.scenario?.id) { // Defensive check
+      console.error("HomeScreen: Invalid session data for continuation.", session);
+      Alert.alert("Error", "Could not continue this session due to missing details.");
       return;
     }
+    console.log(`HomeScreen: Continuing session: ${session.id}, Scenario: ${session.scenario.id}`);
     try {
-      setIsLoading(true);
-      const userMetrics = await MetricsService.getUserMetrics(user.id);
-      console.log("Loaded metrics:", userMetrics);
-      setMetrics(userMetrics);
-    } catch (error) {
-      console.error("Error loading metrics:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Helper function to handle session continuation
-  const handleContinueSession = async (session) => {
-    try {
-      // Ensure we have both session and scenario data
-      if (!session || !session.scenario) {
-        console.error("Invalid session or missing scenario data:", session);
-        return;
-      }
-      
-      console.log("Continuing session:", session.id);
-      
-      // Set the current scenario and session in the app store
       setCurrentScenario(session.scenario);
       setCurrentSession(session);
-      
-      // Save the session first to ensure it's available
-      await saveSession(session);
-      
-      // Navigate to the chat screen with the session ID
       router.push({
         pathname: "/(chat)/[id]",
-        params: { id: session.id },
+        params: {
+          id: session.id,
+          scenarioId: session.scenario.id,
+          isNewSession: "false",
+        },
       });
     } catch (error) {
-      console.error("Error continuing session:", error);
+      console.error("HomeScreen: Error navigating to chat session:", error);
+      Alert.alert("Navigation Error", "Could not open the chat session.");
     }
   };
 
@@ -91,45 +101,28 @@ export default function HomeScreen() {
     const now = new Date();
     const hour = now.getHours();
     let greeting = "Hello";
-    
     if (hour < 12) greeting = "Good morning";
     else if (hour < 18) greeting = "Good afternoon";
     else greeting = "Good evening";
-    
     return (
       <View style={styles.welcomeHeader}>
-        <Heading1>{greeting}, {user?.name || "there"}!</Heading1>
-        
-        {/* Removed streak UI */}
+        <Heading1>{greeting}, {user?.name || "Explorer"}!</Heading1>
       </View>
     );
   };
 
   const renderTodaysFocus = () => {
     const recentActivity = metrics?.recentSessions?.[0];
-
     return (
-      <Card
-        variant="elevated"
-        style={styles.focusCard}
-        onPress={() => router.push("/(tabs)/scenarios")}
-      >
-        <CardHeader 
-          title="Today's Focus"
-          action={
-            <Button
-              variant="icon"
-              icon="more-horizontal"
-              onPress={() => {}}
-              size="small"
-            />
-          }
-        />
+      <Card variant="elevated" style={styles.focusCard}>
+        <CardHeader title="Today's Focus" />
         <CardContent>
-          {recentActivity ? (
+          {isLoading && !metrics ? ( // Show loader only if no metrics yet
+             <ActivityIndicator color={theme.colors.primary.main} />
+          ) : recentActivity && recentActivity.id && recentActivity.scenario?.id ? ( // Ensure activity is valid
             <View>
               <Body1 style={styles.focusTitle}>Continue your progress</Body1>
-              <Body2 style={styles.focusSubtitle}>
+              <Body2 style={styles.focusSubtitle} numberOfLines={1}>
                 {recentActivity.scenario?.title || "Practice Session"}
               </Body2>
               <Button
@@ -169,30 +162,18 @@ export default function HomeScreen() {
       <Card variant="elevated" style={styles.progressCard}>
         <CardHeader title="Your Progress" />
         <CardContent>
-          <View style={styles.statsContainer}>
+          <View style={[styles.statsContainer, { justifyContent: 'space-around' }]}>
             <View style={styles.statItem}>
               <Heading2 color={theme.colors.primary.main}>
-                {isLoading ? "--" : metrics?.totalSessions || 0}
+                {isLoading && !metrics ? "--" : metrics?.totalSessions ?? 0}
               </Heading2>
               <Caption>Total Sessions</Caption>
             </View>
-            
-            <View style={styles.statDivider} />
-            
             <View style={styles.statItem}>
               <Heading2 color={theme.colors.primary.main}>
-                {isLoading ? "--" : Object.keys(metrics?.languageProgress || {}).length}
+                {isLoading && !metrics ? "--" : Object.keys(metrics?.languageProgress || {}).length}
               </Heading2>
               <Caption>Languages</Caption>
-            </View>
-            
-            <View style={styles.statDivider} />
-            
-            <View style={styles.statItem}>
-              <Heading2 color={theme.colors.primary.main}>
-                {isLoading ? "--" : metrics?.completedSessions || 0}
-              </Heading2>
-              <Caption>Completed</Caption>
             </View>
           </View>
         </CardContent>
@@ -201,9 +182,9 @@ export default function HomeScreen() {
   };
 
   const renderRecentActivities = () => {
-    const recentSessions = metrics?.recentSessions || [];
+    const recentSessions = metrics?.recentSessions ?? [];
 
-    if (isLoading) {
+    if (isLoading && !metrics) { // Show loader only if no metrics yet and still loading
       return (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary.main} />
@@ -211,7 +192,7 @@ export default function HomeScreen() {
       );
     }
 
-    if (recentSessions.length === 0) {
+    if (!isLoading && recentSessions.length === 0) { // Show empty state only if not loading
       return (
         <Card variant="flat" style={styles.emptyStateCard}>
           <CardContent>
@@ -234,68 +215,44 @@ export default function HomeScreen() {
       <View style={styles.recentActivitiesContainer}>
         <View style={styles.sectionHeader}>
           <Heading3>Recent Conversations</Heading3>
-          <Button
-            variant="tertiary"
-            size="small"
-            onPress={() => {}}
-          >
-            See all
-          </Button>
         </View>
-        
-        <ScrollView 
+        <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.recentSessionsScrollContent}
         >
-          {recentSessions.map((session) => {
-            // Safely check for required properties
-            if (!session?.target_language?.name) {
-              return null;
-            }
-            
-            const formattedDate = new Date(session.startTime).toLocaleDateString(undefined, {
-              month: 'short',
-              day: 'numeric'
-            });
-            
+          {recentSessions.filter(s => s && s.id && s.scenario?.id).map((session) => { // Filter for valid sessions
+            const formattedDate = session.startTime
+              ? new Date(session.startTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+              : 'Date unknown';
+            const languageName = session.target_language?.name || 'N/A';
+
             return (
               <Card
                 key={session.id}
-                variant="elevated" 
+                variant="elevated"
                 style={styles.sessionCard}
                 onPress={() => handleContinueSession(session)}
               >
                 <CardContent>
                   <View style={styles.sessionCardHeader}>
-                    <View style={[
-                      styles.languageTag, 
-                      { backgroundColor: theme.colors.primary.light }
-                    ]}>
-                      <Caption style={styles.languageTagText}>
-                        {session.target_language.name}
-                      </Caption>
+                    <View style={[styles.languageTag, { backgroundColor: theme.colors.primary.light }]}>
+                      <Caption style={styles.languageTagText}>{languageName}</Caption>
                     </View>
                     <Caption>{formattedDate}</Caption>
                   </View>
-                  
-                  <Body1 
-                    style={styles.sessionTitle}
-                    numberOfLines={2}
-                  >
+                  <Body1 style={styles.sessionTitle} numberOfLines={2}>
                     {session.scenario?.title || "Practice Session"}
                   </Body1>
-                  
                   <View style={styles.sessionStats}>
                     <View style={styles.sessionStat}>
                       <Feather name="message-circle" size={14} color={theme.colors.text.secondary} />
                       <Caption style={styles.sessionStatText}>
-                        {session.messages?.length || 0} messages
+                        {session.messages?.length ?? 0} messages
                       </Caption>
                     </View>
                   </View>
-                  
-                  <Button 
+                  <Button
                     variant="secondary"
                     size="small"
                     style={styles.continueSessionButton}
@@ -309,7 +266,6 @@ export default function HomeScreen() {
               </Card>
             );
           })}
-          
           <Card
             variant="outlined"
             style={styles.newSessionCard}
@@ -328,10 +284,18 @@ export default function HomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.default }]} edges={["top"]}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={ // Added RefreshControl
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary.main} // iOS
+            colors={[theme.colors.primary.main]} // Android
+          />
+        }
       >
         {renderGreeting()}
         {renderTodaysFocus()}
@@ -353,14 +317,6 @@ const styles = StyleSheet.create({
   welcomeHeader: {
     marginBottom: 24,
   },
-  streakContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 8,
-  },
-  streakText: {
-    marginLeft: 6,
-  },
   focusCard: {
     marginBottom: 20,
   },
@@ -380,17 +336,11 @@ const styles = StyleSheet.create({
   },
   statsContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
   },
   statItem: {
     flex: 1,
     alignItems: "center",
-  },
-  statDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: "#E0E0E0",
   },
   sectionHeader: {
     flexDirection: "row",
@@ -403,10 +353,12 @@ const styles = StyleSheet.create({
   },
   recentSessionsScrollContent: {
     paddingRight: 16,
+    paddingLeft: 4,
   },
   sessionCard: {
-    width: 200,
+    width: 220,
     marginRight: 12,
+    overflow: 'hidden',
   },
   sessionCardHeader: {
     flexDirection: "row",
@@ -416,64 +368,80 @@ const styles = StyleSheet.create({
   },
   languageTag: {
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 12,
   },
   languageTagText: {
-    color: "#fff",
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: '600',
   },
   sessionTitle: {
     fontWeight: "600",
     marginBottom: 12,
-    height: 48,
+    minHeight: 40,
+    lineHeight: 20,
   },
   sessionStats: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: 'center',
     marginBottom: 12,
   },
   sessionStat: {
     flexDirection: "row",
     alignItems: "center",
+    marginRight: 10,
   },
   sessionStatText: {
     marginLeft: 4,
+    fontSize: 12,
   },
   continueSessionButton: {
+    marginTop: 'auto',
     alignSelf: "flex-start",
   },
   newSessionCard: {
     width: 120,
-    marginRight: 12,
     justifyContent: "center",
+    alignItems: 'center',
+    minHeight: 150,
   },
   newSessionCardContent: {
     alignItems: "center",
     justifyContent: "center",
+    flex: 1,
   },
   newSessionIconContainer: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: "#F5F5F5",
+    backgroundColor: "#F0F0F0", // Consider theme.colors.background.default or similar
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
   },
   newSessionText: {
     fontWeight: "500",
+    textAlign: 'center',
   },
   loadingContainer: {
     padding: 20,
     alignItems: "center",
+    justifyContent: 'center',
+    minHeight: 100,
   },
   emptyStateCard: {
-    padding: 16,
+    padding: 20,
     alignItems: "center",
+    // backgroundColor: '#F9F9F9', // Consider theme.colors.background.default
+    borderRadius: 8,
+    marginTop: 10,
   },
   emptyStateText: {
     textAlign: "center",
     marginBottom: 16,
+    fontSize: 16,
+    opacity: 0.8,
   },
   emptyStateButton: {
     alignSelf: "center",

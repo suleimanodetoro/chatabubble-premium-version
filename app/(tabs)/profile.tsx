@@ -15,7 +15,6 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-// Removed ThemedText import as it's not used directly
 import { useAppStore } from "@/hooks/useAppStore";
 import { MetricsService } from "@/lib/services/metrics";
 import { supabase } from "@/lib/supabase/client";
@@ -114,35 +113,10 @@ const ProfileHeader = ({
   );
 };
 
-// --- ProgressCard Component (Unchanged) ---
+// --- ProgressCard Component (UPDATED) ---
 const ProgressCard = ({ metrics, isLoading }: { metrics: any; isLoading: boolean }) => {
     const theme = useTheme();
     const rotation = useSharedValue(0);
-    const language = Object.keys(metrics?.languageProgress || {})[0];
-    const languageData = language ? metrics?.languageProgress[language] : null;
-
-    const progressBarWidth = useSharedValue(0);
-
-    // Set progress bar animation
-    useEffect(() => {
-      if (!isLoading && languageData) {
-        const sessionsCompleted = languageData.sessionsCompleted || 0;
-        const progress = Math.min(sessionsCompleted / 20, 1); // 20 sessions = 100%
-
-        progressBarWidth.value = withSpring(progress, {
-          damping: 20,
-          stiffness: 90
-        });
-      } else if (isLoading || !languageData) {
-         progressBarWidth.value = withSpring(0); // Reset if loading or no data
-      }
-    }, [isLoading, languageData, progressBarWidth]); // Added progressBarWidth dependency
-
-    const progressStyle = useAnimatedStyle(() => {
-      return {
-        width: `${progressBarWidth.value * 100}%`
-      };
-    });
 
     const rotatableStyle = useAnimatedStyle(() => {
       return {
@@ -155,17 +129,6 @@ const ProgressCard = ({ metrics, isLoading }: { metrics: any; isLoading: boolean
         damping: 15,
         stiffness: 60
       });
-    };
-
-    // Fix: Ensure we're using string values for Caption content, not objects
-    const getLevelString = (levelData: any): string => {
-      if (!levelData) return 'beginner';
-      // If levelData is already a string, return it
-      if (typeof levelData === 'string') return levelData;
-      // If it's an object with a name property, return that
-      if (typeof levelData === 'object' && levelData.name) return levelData.name;
-      // Default fallback
-      return 'beginner';
     };
 
     return (
@@ -181,7 +144,9 @@ const ProgressCard = ({ metrics, isLoading }: { metrics: any; isLoading: boolean
           }
         />
         <CardContent>
+          {/* --- UPDATED: Removed Minutes Stat --- */}
           <View style={styles.statsContainer}>
+            {/* Total Sessions */}
             <View style={styles.statItem}>
               <Heading2 color={theme.colors.primary.main}>
                 {isLoading ? "--" : metrics?.totalSessions || 0}
@@ -189,50 +154,25 @@ const ProgressCard = ({ metrics, isLoading }: { metrics: any; isLoading: boolean
               <Caption>Total Sessions</Caption>
             </View>
 
+            {/* Divider */}
             <View style={styles.statDivider} />
 
+            {/* Languages */}
             <View style={styles.statItem}>
-              <Heading2 color={theme.colors.primary.main}>
-                {isLoading ? "--" : Math.round(metrics?.totalMinutesPracticed || 0)}
-              </Heading2>
-              <Caption>Minutes</Caption>
-            </View>
-
-            <View style={styles.statDivider} />
-
-            <View style={styles.statItem}>
-              {/* Removed streak UI */}
               <Heading2 color={theme.colors.primary.main}>
                 {isLoading ? "--" : Object.keys(metrics?.languageProgress || {}).length}
               </Heading2>
               <Caption>Languages</Caption>
             </View>
+
+            {/* Removed Minutes Stat and its Divider */}
           </View>
+          {/* --- END UPDATE --- */}
 
-          {language && languageData && ( // Added check for languageData
-            <View style={styles.languageProgressContainer}>
-              <View style={styles.languageProgressHeader}>
-                <Body1 weight="semibold">{language}</Body1>
-                {/* Fix: Ensure we never pass an object to Caption */}
-                <Caption>{getLevelString(languageData?.level)}</Caption>
-              </View>
+          {/* --- REMOVED Language Progress Bar Section --- */}
+          {/* The entire languageProgressContainer View has been removed */}
+          {/* --- END REMOVAL --- */}
 
-              <View style={styles.progressBarContainer}>
-                <Animated.View
-                  style={[
-                    styles.progressBar,
-                    { backgroundColor: theme.colors.primary.main },
-                    progressStyle
-                  ]}
-                />
-              </View>
-
-              <View style={styles.progressStats}>
-                <Caption>{languageData?.sessionsCompleted || 0} sessions</Caption>
-                <Caption>{Math.round((languageData?.totalDuration || 0) / 60000)} minutes</Caption>
-              </View>
-            </View>
-          )}
         </CardContent>
       </Card>
     );
@@ -328,7 +268,7 @@ const DangerAction = ({
   );
 };
 
-// --- Main Profile Screen Component ---
+// --- Main Profile Screen Component (Unchanged Logic) ---
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, setUser, setCurrentSession, setCurrentScenario } = useAppStore();
@@ -597,6 +537,7 @@ export default function ProfileScreen() {
           entering={FadeInDown.delay(200).springify()}
           layout={Layout.springify()}
         >
+          {/* ProgressCard component will render the updated UI */}
           <ProgressCard
             metrics={metrics}
             isLoading={isLoading}
@@ -943,7 +884,7 @@ export default function ProfileScreen() {
   );
 }
 
-// --- Styles (Unchanged, except for minor spacing adjustments if needed) ---
+// --- Styles (UPDATED) ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -987,9 +928,9 @@ const styles = StyleSheet.create({
   },
   statsContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "space-around", // Adjusted for fewer items
     alignItems: "center",
-    marginBottom: 24,
+    // Removed marginBottom as the progress bar section is gone
   },
   statItem: {
     flex: 1,
@@ -1008,30 +949,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  languageProgressContainer: {
-    marginTop: 8,
-  },
-  languageProgressHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  progressBarContainer: {
-    height: 8,
-    backgroundColor: "#F3F4F6", // Or theme.colors.background.default
-    borderRadius: 4,
-    overflow: "hidden",
-    marginBottom: 8,
-  },
-  progressBar: {
-    height: "100%",
-    borderRadius: 4,
-  },
-  progressStats: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
+  // Removed languageProgressContainer styles
+  // Removed languageProgressHeader styles
+  // Removed progressBarContainer styles
+  // Removed progressBar styles
+  // Removed progressStats styles
   settingsSection: {
     marginBottom: 24,
   },
@@ -1139,6 +1061,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   confirmDeleteButton: {
-    backgroundColor: theme.colors.error.main,
+    backgroundColor: theme.colors.error.main, // Use theme variable
   },
 });

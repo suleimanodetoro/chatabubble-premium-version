@@ -1,505 +1,254 @@
 // lib/services/auth.ts
+
 import { supabase } from "@/lib/supabase/client";
 import { ProfileService } from "./profile";
 import { EncryptionService } from "./encryption";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
-import { Platform } from "react-native";
+import { Platform, Alert } from "react-native";
 import * as AppleAuthentication from "expo-apple-authentication";
-import { StorageService } from "./storage";
-import { SessionManager } from "./sessionManager";
+import { StorageService } from "./storage"; // For local data cleanup
+import { SessionManager } from "./sessionManager"; // For session cleanup
 
+const KEY_STATUS_PREFIX = "@key_status:"; // Consistent prefix
+const AUTH_TYPE_KEY_PREFIX = "@auth_type_"; // Consistent prefix
+const ONBOARDING_COMPLETED_KEY_PREFIX = "@onboarding_completed:"; // From ProfileService
 
-const KEY_STATUS = "@key_status:";
-const SITE_URL = "https://chatabubble.com";
-
-WebBrowser.maybeCompleteAuthSession();
+WebBrowser.maybeCompleteAuthSession(); // For OAuth flows
 
 export class AuthService {
+  // Used by OAuth debug flows; leave as-is
   private static redirectUrl = Linking.createURL("auth/debug");
 
-   /**
-   * Deletes a user account and all associated data
-   * Works with all authentication types (email, Google, Apple)
-   * Performs a complete cleanup of local data and remote data
-   */
-   static async deleteAccount(userId: string, email: string): Promise<{ success: boolean; error?: string }> {
+  /** Delete a user's entire account (local + remote data) */
+  static async deleteAccount(
+    userId: string,
+    email: string
+  ): Promise<{ success: boolean; error?: string }> {
     try {
-      console.log('Starting account deletion process for user:', userId);
-      
-      // 1. Clear all local data first (in case network operations fail)
-      console.log('Cleaning up local data...');
+      console.log(
+        `AuthService: Starting account deletion process for user: ${userId}, email: ${email}`
+      );
+
+      // 1. Clean up all local data
       await this.cleanupLocalData(userId);
-      
-      // 2. Delete user data from Supabase tables (before deleting auth)
-      console.log('Deleting remote user data...');
-      await this.deleteUserData(userId);
-      
-      // 3. Delete the actual user account from Supabase Auth
-      console.log('Deleting user authentication record...');
-      const { error } = await supabase.auth.admin.deleteUser(userId);
-      
-      // If admin delete fails, try the user-initiated method
-      if (error) {
-        console.log('Admin delete failed, attempting user delete:', error);
-        const { error: userDeleteError } = await supabase.auth.updateUser({
-          data: { deleted: true, deleted_at: new Date().toISOString() }
-        });
-        
-        if (userDeleteError) {
-          throw userDeleteError;
-        }
-      }
-      
-      // 4. Sign out to clear authentication state
-      console.log('Signing out user...');
-      await this.signOut();
-      
-      console.log('Account deletion completed successfully');
+
+      // 2. Delete user data in your database tables
+      await this.deleteRemoteUserData(userId);
+
+      // 3. Sign the user out
+      await supabase.auth.signOut();
+      console.log(`AuthService: Signed out user ${userId} as part of account deletion.`);
+
       return { success: true };
-    } catch (error) {
-      console.error('Error in account deletion:', error);
-      return { 
-        success: false, 
-        error: (error as Error).message || 'Failed to delete account. Please try again.' 
+    } catch (err) {
+      console.error(`AuthService: Error deleting account for user ${userId}:`, err);
+      return {
+        success: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Failed to delete account. Please try again.",
       };
     }
   }
 
-
-  
-/**
- * Cleans up all local user data
- */
-private static async cleanupLocalData(userId: string): Promise<void> {
-  try {
-    // Clean up encryption keys
-    await EncryptionService.removeEncryptionKey(userId);
-    
-    // Clean up session data
-    await SessionManager.cleanup(userId);
-    
-    // Clean up AsyncStorage data
-    await StorageService.clearUserData(userId);
-    
-    // Clear auth token
-    await AsyncStorage.removeItem("supabase.auth.token");
-    
-    // Clear any other user-specific keys
-    await AsyncStorage.removeItem(`${KEY_STATUS}${userId}`);
-    await AsyncStorage.removeItem(`@auth_type_${userId}`);
-    await AsyncStorage.removeItem(`@social_secret:${userId}`);
-    
-    // Get all keys and remove any that contain the userId
-    const allKeys = await AsyncStorage.getAllKeys();
-    const userKeys = allKeys.filter(key => key.includes(userId));
-    if (userKeys.length > 0) {
-      console.log(`Found ${userKeys.length} additional user keys to remove`);
-      await AsyncStorage.multiRemove(userKeys);
-    }
-  } catch (error) {
-    console.error('Error cleaning up local data:', error);
-    throw error;
-  }
-}
-/**
-   * Deletes user data from Supabase database tables
-   */
-private static async deleteUserData(userId: string): Promise<void> {
+  private static async cleanupLocalData(userId: string): Promise<void> {
+    console.log(`AuthService: Cleaning up local data for user ${userId}`);
     try {
-      // Delete user sessions
-      const { error: sessionsError } = await supabase
-        .from('chat_sessions')
-        .delete()
-        .eq('user_id', userId);
-      
-      if (sessionsError) {
-        console.error('Error deleting chat sessions:', sessionsError);
-      }
-      
-      // Delete user scenarios (only those created by this user)
-      const { error: scenariosError } = await supabase
-        .from('scenarios')
-        .delete()
-        .eq('created_by', userId);
-      
-      if (scenariosError) {
-        console.error('Error deleting scenarios:', scenariosError);
-      }
-      
-      // Update user profile with deletion marker
-      // We're using update instead of delete to maintain referential integrity
-      // while still anonymizing the data
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          username: `deleted_${Date.now()}`,
-          email: null,
-          settings: { deleted: true, deleted_at: new Date().toISOString() },
-          native_language: null,
-          learning_languages: [],
-          current_levels: {},
-        })
-        .eq('id', userId);
-      
-      if (profileError) {
-        console.error('Error updating profile for deletion:', profileError);
-      }
-    } catch (error) {
-      console.error('Error deleting user data from database:', error);
-      throw error;
-    }
-  }
-
-  static async signInWithApple() {
-    try {
-      if (Platform.OS !== "ios") {
-        throw new Error("Apple Sign In is only available on iOS devices");
-      }
-
-      // Clear any existing session
-      await supabase.auth.signOut();
+      // Encryption key
+      await EncryptionService.removeEncryptionKey(userId);
+      // Session + Storage
+      await SessionManager.cleanup(userId);
+      await StorageService.clearUserData(userId);
+      // Onboarding flag
+      await AsyncStorage.removeItem(`${ONBOARDING_COMPLETED_KEY_PREFIX}${userId}`);
+      // Supabase token
       await AsyncStorage.removeItem("supabase.auth.token");
+      console.log(`AuthService: Local data cleanup finished for ${userId}`);
+    } catch (err) {
+      console.error(`AuthService: Error in local cleanup for ${userId}:`, err);
+    }
+  }
 
-      // Get credential from Apple
+  private static async deleteRemoteUserData(userId: string): Promise<void> {
+    console.log(`AuthService: Deleting remote DB data for ${userId}`);
+    try {
+      let res = await supabase.from("chat_sessions").delete().eq("user_id", userId);
+      if (res.error) console.error("Error deleting chat sessions:", res.error);
+      res = await supabase.from("scenarios").delete().eq("created_by", userId);
+      if (res.error) console.error("Error deleting scenarios:", res.error);
+      res = await supabase.from("profiles").delete().eq("id", userId);
+      if (res.error) console.error("Error deleting profile:", res.error);
+      console.log(`AuthService: Remote data deletion finished for ${userId}`);
+    } catch (err) {
+      console.error(`AuthService: Remote deletion error for ${userId}:`, err);
+      throw err;
+    }
+  }
+
+  /** Sign in with Apple (iOS only) */
+  static async signInWithApple() {
+    if (Platform.OS !== "ios") throw new Error("Apple Sign In is iOS-only");
+    try {
+      await supabase.auth.signOut().catch(() => {});
+      await AsyncStorage.removeItem("supabase.auth.token");
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
       });
-
-      // Sign in to Supabase with the Apple credential
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.signInWithIdToken({
-        provider: "apple",
-        token: credential.identityToken!,
-      });
-
-      if (error) throw error;
-      if (!user) throw new Error("No user returned from Supabase");
-
-      await this.setupUserAfterAuth(user, "social");
-      return user;
-    } catch (error: any) {
-      if (error.code === "ERR_CANCELED") {
-        // User canceled the sign in
-        return null;
+      if (!credential.identityToken) {
+        throw new Error("No identity token from Apple");
       }
-      console.error("Error in Apple sign in:", error);
-      throw error;
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: "apple",
+        token: credential.identityToken,
+      });
+      if (error) throw error;
+      await this.setupUserAfterAuth(data.user!, "social");
+      return data.user;
+    } catch (err: any) {
+      if (err.code === "ERR_CANCELED") return null;
+      console.error("AuthService: Apple sign-in error:", err);
+      throw err;
     }
   }
 
+  /** Sign in with Google via OAuth */
   static async signInWithGoogle() {
     try {
-      // Clear any existing session
-      await supabase.auth.signOut();
+      await supabase.auth.signOut().catch(() => {});
       await AsyncStorage.removeItem("supabase.auth.token");
-
-      console.log("Starting Google sign in...");
-      console.log("Redirect URL:", this.redirectUrl);
-
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: {
-          redirectTo: this.redirectUrl,
-          queryParams: {
-            prompt: "select_account",
-          },
-        },
+        options: { redirectTo: this.redirectUrl, queryParams: { prompt: "select_account" } },
       });
-
       if (error) throw error;
-      if (!data?.url) throw new Error("No OAuth URL returned");
-
-      console.log("Opening auth session with URL:", data.url);
-      const result = await WebBrowser.openAuthSessionAsync(
-        data.url,
-        this.redirectUrl
-      );
-
-      console.log("Auth session result:", result);
-
-      if (result.type === "success") {
-        // Parse the URL to extract access_token
-        const url = result.url;
-        const hashedPart = url.split("#")[1];
-        if (!hashedPart) throw new Error("No token in redirect URL");
-
-        const params = new URLSearchParams(hashedPart);
-        const access_token = params.get("access_token");
-        const refresh_token = params.get("refresh_token");
-
-        if (access_token) {
-          // Set the session manually
-          const { data: sessionData, error: sessionError } =
-            await supabase.auth.setSession({
-              access_token,
-              refresh_token: refresh_token || "",
-            });
-
-          if (sessionError) throw sessionError;
-
-          if (sessionData.session?.user) {
-            await this.setupUserAfterAuth(sessionData.session.user, "social");
-            return sessionData.session.user;
-          }
-        }
-      }
-
-      await WebBrowser.dismissAuthSession();
+      const result = await WebBrowser.openAuthSessionAsync(data.url!, this.redirectUrl);
+      if (result.type !== "success") return null;
+      // Supabase client picks up session automatically
       return null;
-    } catch (error) {
-      console.error("Error in Google sign in:", error);
-      throw error;
+    } catch (err) {
+      WebBrowser.dismissAuthSession();
+      console.error("AuthService: Google sign-in error:", err);
+      throw err;
     }
   }
 
-  // Enhanced setupUserAfterAuth method in auth.ts
-
+  /** Common post-auth setup (encryption key, auth-type) */
   private static async setupUserAfterAuth(
-    user: any,
+    user: { id: string; email?: string | null },
     authType: "password" | "social"
   ): Promise<boolean> {
-    console.log("Setting up user after auth:", user.id, "auth type:", authType);
-
+    if (!user || !user.id || !user.email) return false;
     try {
-      // Create or get profile with retries
-      let profile = null;
-      let retryCount = 0;
-      const maxRetries = 3;
+      await AsyncStorage.setItem(`${AUTH_TYPE_KEY_PREFIX}${user.id}`, authType);
+      await EncryptionService.ensureEncryptionKey(user.id, user.email);
+      return true;
+    } catch (err) {
+      console.error("AuthService: setupUserAfterAuth error:", err);
+      return false;
+    }
+  }
 
-      while (!profile && retryCount < maxRetries) {
-        try {
-          profile = await ProfileService.setupProfile(user.id, user.email);
-          if (profile) {
-            console.log("Profile setup successful:", profile);
-            break;
-          }
-        } catch (error) {
-          console.error(
-            `Profile setup attempt ${retryCount + 1} failed:`,
-            error
-          );
-          retryCount++;
-          if (retryCount === maxRetries) throw error;
-          await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second between retries
-        }
-      }
+  /** EMAIL/PASSWORD SIGNUP → sends confirmation link to chatabubble://confirm  */
+  static async signUp(
+    email: string,
+    password: string
+  ): Promise<{ user: any | null; error: Error | null }> {
+    try {
+      console.log("AuthService: Starting email/password signup...");
+      // ← updated: redirect to /confirm instead of /auth/confirm
+      const emailRedirectURL = Linking.createURL("confirm");
+      console.log("AuthService: Email confirmation redirect URL:", emailRedirectURL);
 
-      // Set up encryption if needed
-      const keyStatus = await AsyncStorage.getItem(`${KEY_STATUS}${user.id}`);
-      if (!keyStatus) {
-        console.log("Setting up encryption for user:", user.id);
-
-        // Store the auth type first
-        await AsyncStorage.setItem(`@auth_type_${user.id}`, authType);
-
-        // Generate encryption key with the correct auth type
-        await EncryptionService.generateUserKey(user.id, user.email, authType);
-        await AsyncStorage.setItem(`${KEY_STATUS}${user.id}`, "generated");
-      }
-
-      // Set auth persistence
-      await AsyncStorage.setItem(
-        "supabase.auth.token",
-        JSON.stringify({
-          access_token: (
-            await supabase.auth.getSession()
-          ).data.session?.access_token,
-          user_id: user.id,
-          auth_type: authType, // Store auth type in token object too
-        })
+      const { data, error } = await supabase.auth.signUp(
+        { email: email.trim().toLowerCase(), password },
+        { redirectTo: emailRedirectURL }
       );
-
-      return true;
-    } catch (error) {
-      console.error("Error in setupUserAfterAuth:", error);
-      // Don't throw here - we want to continue even if profile setup fails
-      // The user can still use the app, we'll try to set up the profile later
-      return true;
-    }
-  }
-
-  static async signUp(email: string, password: string) {
-    try {
-      console.log("Starting signup process...");
-
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${SITE_URL}/auth/callback?redirect=${encodeURIComponent(
-            this.redirectUrl
-          )}`,
-        },
-      });
-
       if (error) throw error;
-      if (!user) throw new Error("No user returned after signup");
-
-      await this.setupUserAfterAuth(user, "password");
-      return user;
-    } catch (error) {
-      console.error("Error in signUp:", error);
-      throw error;
+      console.log(`AuthService: Signup initiated for ${data.user?.id}`);
+      return { user: data.user!, error: null };
+    } catch (err) {
+      console.error("AuthService: Email signup error:", err);
+      return { user: null, error: err instanceof Error ? err : new Error(String(err)) };
     }
   }
 
-  static async signIn(email: string, password: string) {
+  /** EMAIL/PASSWORD SIGNIN */
+  static async signIn(email: string, password: string): Promise<{ user: any | null; error: Error | null }> {
     try {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.signInWithPassword({
-        email,
+      await supabase.auth.signOut().catch(() => {});
+      await AsyncStorage.removeItem("supabase.auth.token");
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
         password,
       });
-
       if (error) throw error;
-      if (!user) throw new Error("No user returned after signin");
-
-      await this.setupUserAfterAuth(user, "password");
-      return user;
-    } catch (error) {
-      console.error("Error in signIn:", error);
-      throw error;
+      await this.setupUserAfterAuth(data.user!, "password");
+      return { user: data.user!, error: null };
+    } catch (err) {
+      console.error("AuthService: Signin error:", err);
+      return { user: null, error: err instanceof Error ? err : new Error(String(err)) };
     }
   }
 
+  /** SIGN OUT and cleanup */
   static async signOut() {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user?.id) {
-        await AsyncStorage.removeItem(`${KEY_STATUS}${user.id}`);
-        await AsyncStorage.removeItem("supabase.auth.token");
-      }
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-    } catch (error) {
-      console.error("Error in signOut:", error);
-      throw error;
+      const { data } = await supabase.auth.getUser();
+      await supabase.auth.signOut();
+      if (data.user?.id) await this.cleanupLocalData(data.user.id);
+    } catch (err) {
+      console.error("AuthService: Signout error:", err);
+      await AsyncStorage.removeItem("supabase.auth.token");
+      throw err;
     }
   }
 
-  static async resetPassword(email: string) {
+  /** INITIATE PASSWORD RESET */
+  static async resetPassword(email: string): Promise<{ success: boolean; error?: Error | null }> {
     try {
-      console.log('Initiating password reset for email:', email);
-      
-      // Use deep link URL instead of website URL
+      console.log("AuthService: Initiating password reset for:", email);
       const resetRedirectUrl = Linking.createURL("reset-callback");
-      console.log('Reset redirect URL:', resetRedirectUrl);
-      
-      // Make sure email is trimmed and lowercase
-      const sanitizedEmail = email.trim().toLowerCase();
-      
-      // Request password reset from Supabase
-      const { error } = await supabase.auth.resetPasswordForEmail(sanitizedEmail, {
+      console.log("AuthService: Reset redirect URL:", resetRedirectUrl);
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
         redirectTo: resetRedirectUrl,
       });
-      
       if (error) throw error;
-      
-      console.log('Password reset email sent successfully');
-      return { success: true };
-    } catch (error) {
-      console.error('Error in resetPassword:', error);
-      throw error;
+      return { success: true, error: null };
+    } catch (err) {
+      console.error("AuthService: Reset email error:", err);
+      return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
     }
   }
-  static async updatePassword(userId: string, newPassword: string) {
+
+  /** HANDLE PASSWORD UPDATE for logged-in user */
+  static async updatePassword(userId: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
     try {
-      console.log("Updating password with re-encryption for user:", userId);
-  
-      // Get current user information for proper auth type detection
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
-  
-      // Detect auth type from multiple sources to ensure accuracy
-      let authType = await AsyncStorage.getItem(`@auth_type_${userId}`);
-      
-      // If not stored or possibly incorrect, detect from metadata
-      if (!authType || authType === 'password') {
-        const isSocialAuth = userData.user?.app_metadata?.provider && 
-                            userData.user.app_metadata.provider !== 'email';
-        
-        if (isSocialAuth) {
-          console.log("Detected social auth from metadata:", userData.user.app_metadata.provider);
-          authType = 'social';
-          // Update stored auth type to prevent future issues
-          await AsyncStorage.setItem(`@auth_type_${userId}`, 'social');
-        } else {
-          authType = 'password';
-        }
+      const { data, error: getUserError } = await supabase.auth.getUser();
+      if (getUserError) throw getUserError;
+      const userEmail = data.user?.email;
+      if (!userEmail || data.user.id !== userId) throw new Error("User mismatch");
+
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) throw updateError;
+
+      const authType = (await AsyncStorage.getItem(`${AUTH_TYPE_KEY_PREFIX}${userId}`)) || "password";
+      if (authType === "password") {
+        await EncryptionService.generateUserKey(userId, newPassword, "password");
+        await AsyncStorage.setItem(`${KEY_STATUS_PREFIX}${userId}`, "regenerated_post_password_update");
+      } else {
+        await EncryptionService.ensureEncryptionKey(userId, userEmail);
       }
-      
-      console.log("Using auth type for encryption:", authType);
-  
-      // First, update the password with Supabase
-      const { data, error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-  
-      if (error) throw error;
-  
-      // Always regenerate encryption key after password change
-      console.log("Regenerating encryption key with auth type:", authType);
-      
-      // Generate a new encryption key based on the detected auth type
-      await EncryptionService.generateUserKey(
-        userId,
-        data.user.email!,
-        authType as "password" | "social"
-      );
-      
-      await AsyncStorage.setItem(`@key_status:${userId}`, 'generated');
-  
-      // Re-encrypt existing data
-      const sessions = await StorageService.getActiveSessions();
-      const userSessions = sessions.filter((s) => s.userId === userId);
-  
-      console.log(`Found ${userSessions.length} sessions to re-encrypt`);
-  
-      // Process each session
-      for (const session of userSessions) {
-        const messages = await StorageService.loadChatHistory(session.id);
-        if (messages.length > 0) {
-          // Encrypt messages with new key
-          const encryptedMessages = await Promise.all(
-            messages.map((msg) =>
-              EncryptionService.encryptChatMessage(msg, userId)
-            )
-          );
-  
-          await StorageService.saveChatHistory(session.id, encryptedMessages);
-  
-          // Update session
-          const updatedSession = {
-            ...session,
-            messages: encryptedMessages,
-            lastUpdated: Date.now(),
-          };
-          await StorageService.saveSession(updatedSession);
-        }
-      }
-  
-      console.log("Password update and data re-encryption completed");
+
       return { success: true };
-    } catch (error) {
-      console.error("Error in updatePassword:", error);
-      return { 
-        success: false, 
-        error: (error as Error).message 
-      };
+    } catch (err) {
+      console.error("AuthService: updatePassword error:", err);
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
     }
   }
 }

@@ -2,7 +2,7 @@
 import {
     createContext,
     useContext,
-    useReducer, 
+    useReducer,
     useEffect,
     ReactNode,
     useCallback,
@@ -48,7 +48,7 @@ const initialState: ChatState = {
     syncStatus: "idle",
 };
 
-// Keep chatReducer as it was
+// Keep chatReducer as it was, with the UPDATE_MESSAGE fix
 const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
     console.log(
     `DEBUG: chatReducer - Action Type: ${action.type}`,
@@ -58,12 +58,15 @@ const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
     case "ADD_MESSAGE":
         return { ...state, messages: [...state.messages, action.payload] };
     case "UPDATE_MESSAGE":
-        const messageIndex = state.messages.findIndex(msg => msg.id === action.payload.id);
-        if (messageIndex === -1) return state;
-        const updatedMessages = state.messages.slice(0, messageIndex + 1).map(msg =>
-        msg.id === action.payload.id ? { ...msg, ...action.payload.message } : msg
-        );
-        return { ...state, messages: updatedMessages };
+        // CORRECTED: Map over the entire messages array to update the specific message
+        return {
+            ...state,
+            messages: state.messages.map(msg =>
+                msg.id === action.payload.id
+                    ? { ...msg, ...action.payload.message }
+                    : msg
+            ),
+        };
     case "SET_LOADING":
         return { ...state, isLoading: action.payload };
     case "SET_EDITING":
@@ -82,12 +85,11 @@ const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
 };
 
 interface ChatContextValue {
-    state: ChatState; // Use real state
-    dispatch: React.Dispatch<ChatAction>; // Use real dispatch
+    state: ChatState;
+    dispatch: React.Dispatch<ChatAction>;
     completeSession: () => Promise<void>;
     saveSession: () => Promise<void>;
     syncStatus: ChatState["syncStatus"];
-    // Remove setSessionIdOnly if it existed
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -105,9 +107,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         target_language,
         setCurrentSession,
     } = useAppStore();
-    console.log("DEBUG: ChatProvider - Reading from useAppStore:", { hasUser: !!user }); // Example log
+    console.log("DEBUG: ChatProvider - Reading from useAppStore:", { hasUser: !!user });
 
-    // --- Keep memoized syncWithSupabase ---
     const syncWithSupabase = useCallback(async () => {
         if (!state.sessionId || !currentSession) {
             console.log("Sync skipped: missing session ID or currentSession", { sid: state.sessionId, cs: !!currentSession });
@@ -122,9 +123,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             console.error("Sync error:", error);
             dispatch({ type: "SYNC_STATUS", payload: "error" });
         }
-    }, [state.sessionId, currentSession, dispatch]); // Ensure dependencies are correct
+    }, [state.sessionId, currentSession, dispatch]);
 
-    // --- Keep memoized handleRemoteUpdate ---
     const handleRemoteUpdate = useCallback(async (remoteSession: Session) => {
          const localSession = await StorageService.loadSession(remoteSession.id);
          if (!localSession || remoteSession.lastUpdated > localSession.lastUpdated) {
@@ -138,10 +138,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                  setCurrentSession(remoteSession);
              }
          }
-    }, [state.sessionId, state.status, setCurrentSession, dispatch]); // Ensure dependencies are correct
+    }, [state.sessionId, state.status, setCurrentSession, dispatch]);
 
 
-    // --- Keep Realtime Effect (BODY STILL COMMENTED OUT) ---
     useEffect(() => {
         console.log("DEBUG: ChatProvider - Realtime effect triggered (body disabled).");
         /*
@@ -150,10 +149,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         return () => {
             console.log("DEBUG: ChatProvider - Realtime effect cleanup (dummy - body disabled).");
         };
-    }, [user?.id, state.sessionId, handleRemoteUpdate]); // Dependencies kept
+    }, [user?.id, state.sessionId, handleRemoteUpdate]);
 
 
-    // --- Keep Network Effect (BODY STILL COMMENTED OUT) ---
     useEffect(() => {
         console.log("DEBUG: ChatProvider - Network effect triggered (body disabled).");
         /*
@@ -162,9 +160,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
          return () => {
             console.log("DEBUG: ChatProvider - Network effect cleanup (dummy - body disabled).");
          };
-    }, [state.sessionId, state.status, syncWithSupabase]); // Dependencies kept
+    }, [state.sessionId, state.status, syncWithSupabase]);
 
-    // --- Keep completeSession ---
     const completeSession = useCallback(async () => {
          if (!state.sessionId || !currentScenario || !state.messages.length || !user?.id) return;
          const sessionStartTime = currentSession?.startTime || Date.now();
@@ -186,7 +183,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
          }
     }, [state.sessionId, currentScenario, state.messages, user?.id, source_language, target_language, currentSession?.startTime, setCurrentSession, dispatch]);
 
-    // --- Keep saveSession ---
     const saveSession = useCallback(async () => {
          if (!state.sessionId || !currentScenario) return;
          const sessionStartTime = currentSession?.startTime || Date.now();
@@ -208,14 +204,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
          }
     }, [state.sessionId, currentScenario, state.messages, user?.id, source_language, target_language, currentSession?.startTime, syncWithSupabase, setCurrentSession, dispatch]);
 
-    // --- Restore context value with REAL state and dispatch ---
     const contextValue = useMemo(() => ({
-        state, // Pass the real state from useReducer
-        dispatch, // Pass the real dispatch
+        state,
+        dispatch,
         completeSession,
         saveSession,
         syncStatus: state.syncStatus,
-    }), [state, dispatch, completeSession, saveSession]); // Depend on real state/dispatch
+    }), [state, dispatch, completeSession, saveSession]);
 
     console.log("DEBUG: ChatProvider rendering children (Restored useReducer)...");
     return (
@@ -225,7 +220,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     );
 }
 
-// Keep useChatContext hook
 export function useChatContext() {
     const context = useContext(ChatContext);
     if (!context) {

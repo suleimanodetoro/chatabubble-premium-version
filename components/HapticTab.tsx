@@ -1,7 +1,6 @@
 // components/HapticTab.tsx
 import React from 'react';
-import { Pressable } from 'react-native';
-import * as Haptics from 'expo-haptics';
+// Pressable and Haptics removed
 import { Feather } from '@expo/vector-icons';
 
 interface HapticTabProps {
@@ -10,14 +9,9 @@ interface HapticTabProps {
   size?: number;
 }
 
+// Removed Pressable wrapper and onPress handler
 export function HapticTab({ iconName, color, size = 24 }: HapticTabProps) {
-  const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-
   return (
-    <Pressable onPress={handlePress}>
-      <Feather name={iconName} size={size} color={color} />
-    </Pressable>
+    <Feather name={iconName} size={size} color={color} />
   );
 }

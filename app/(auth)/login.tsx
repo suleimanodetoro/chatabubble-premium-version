@@ -1,4 +1,4 @@
-// app/(auth)/login.tsx
+// app/auth/login.tsx
 import { useState, useEffect } from "react";
 import {
   StyleSheet,

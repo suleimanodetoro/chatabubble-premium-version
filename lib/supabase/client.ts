@@ -13,7 +13,7 @@ export const supabase = createClient<Database>(Config.SUPABASE_URL, Config.SUPAB
     storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: true,
   },
 });
 

@@ -1,394 +1,371 @@
 // lib/services/profile.ts
 import { supabase } from '@/lib/supabase/client';
-import { Language } from '@/types';
+import { Language, User as AppUserType } from '@/types'; // Renamed User to AppUserType to avoid conflict
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-interface ProfileSettings {
+const ONBOARDING_COMPLETED_KEY_PREFIX = '@onboarding_completed:';
+
+export interface ProfileSettings { // Exporting for use in AppUserType if needed
   notifications?: boolean;
   theme?: 'light' | 'dark' | 'system';
   hasCompletedOnboarding?: boolean;
-  // Add other settings as needed
 }
 
-// Define a type for the profile data including the new fields
-// You might want to sync this with your Database types in lib/supabase/types.ts
-type ProfileData = {
-    id: string;
-    updated_at: string;
+// This type represents the data structure in your 'profiles' table
+// and should be consistent with what AppUserType expects.
+export type ProfileData = {
+    id: string; // UUID, matches auth.users.id
+    updated_at: string; // ISO string timestamp
     username: string | null;
-    native_language: any; // Consider defining a specific type if possible
-    learning_languages: any[]; // Consider defining a specific type if possible
-    current_levels: any; // Consider defining a specific type if possible
+    email?: string; // Typically from auth.users, not stored in profiles table unless duplicated
+    native_language: Language;
+    learning_languages: Language[];
+    current_levels: Record<string, 'beginner' | 'intermediate' | 'advanced'>;
     daily_streak: number | null;
-    last_practice: string | null;
+    last_practice: string | null; // ISO string timestamp
     settings: ProfileSettings | null;
-    created_at: string; // Added based on your SQL output
-    daily_message_count?: number | null; // Added field
-    last_message_date?: string | null; // Added field (date as string 'YYYY-MM-DD')
+    // created_at is handled by DB default
+    daily_message_count?: number | null;
+    last_message_date?: string | null; // Date string 'YYYY-MM-DD'
 };
 
-// Type for the updates allowed in updateProfile, including new fields
-// Moved outside the class definition
-type ProfileUpdates = Partial<{
-    username?: string;
-    settings?: ProfileSettings;
-    native_language?: Language; // Assuming Language type is appropriate
-    current_levels?: Record<string, string>; // Example type, adjust if needed
-    daily_message_count?: number; // Allow updating count
-    last_message_date?: string; // Allow updating date
-    // Add other updatable fields as needed
-}>;
+// For updates, allow partial data matching ProfileData, excluding system-set fields
+export type ProfileUpdates = Partial<Omit<ProfileData, 'id' | 'updated_at' | 'email'>>;
 
 
 export class ProfileService {
-  // --- Existing methods ---
   static async generateUniqueUsername(baseUsername: string): Promise<string> {
     let username = baseUsername.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!username) username = `user${Date.now().toString().slice(-6)}`;
     let counter = 0;
     let isUnique = false;
     let finalUsername = username;
 
-    while (!isUnique) {
-      const { data, error } = await supabase
+    while (!isUnique && counter < 100) {
+      const { error, count } = await supabase
         .from('profiles')
-        .select('username', { count: 'exact', head: true }) // More efficient check
+        .select('username', { count: 'exact', head: true })
         .eq('username', finalUsername);
 
-
       if (error) {
-          console.error("Error checking username uniqueness:", error);
-          throw error; // Rethrow errors
+          console.error("ProfileService: Error checking username uniqueness:", error);
+          finalUsername = `${username}_${Math.random().toString(36).substring(2, 7)}`;
+          counter++;
+          if (counter > 5) {
+            throw new Error("Failed to generate unique username due to persistent database error.");
+          }
+          continue;
       }
-
-      // Check the count from the response header
-      if (data === null) { // No match found
+      if (count === 0) {
         isUnique = true;
       } else {
         counter++;
         finalUsername = `${username}${counter}`;
-        if (counter > 100) { // Add a safety break
-            console.error("Could not generate unique username after 100 attempts for:", baseUsername);
-            throw new Error("Failed to generate unique username.");
-        }
       }
     }
-
+     if (!isUnique) {
+        console.error("ProfileService: Could not generate unique username after attempts for:", baseUsername);
+        throw new Error("Failed to generate unique username after extensive attempts.");
+    }
     return finalUsername;
   }
 
-  static async setupProfile(userId: string, email: string): Promise<ProfileData | null> {
+  static async setupProfile(userId: string, email: string): Promise<AppUserType | null> {
     try {
-      console.log('Attempting to setup profile for:', userId);
-
-      // First check if profile exists
-      const { data: existingProfile, error: fetchError } = await supabase
+      console.log('ProfileService: Attempting to setup profile for:', userId);
+      const { data: existingProfileData, error: fetchError } = await supabase
         .from('profiles')
-        .select<"*", ProfileData>('*') // Specify the expected return type
+        .select('*') // Fetches all columns from 'profiles' table
         .eq('id', userId)
         .maybeSingle();
 
-       if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = 'Requested range not satisfiable' (means 0 rows)
-           console.error("Error fetching existing profile during setup:", fetchError);
+       if (fetchError && fetchError.code !== 'PGRST116') {
+           console.error("ProfileService: Error fetching existing profile during setup:", fetchError);
            throw fetchError;
        }
+       
+       let finalProfileData: ProfileData;
 
-      if (existingProfile) {
-        console.log('Profile already exists:', existingProfile);
-        // Ensure existing profile has the new fields, default if necessary
-        return {
-            ...existingProfile,
-            daily_message_count: existingProfile.daily_message_count ?? 0,
-            last_message_date: existingProfile.last_message_date ?? null,
-        };
-      }
-
-      // Generate unique username
-      const baseUsername = email.split('@')[0] || `user_${userId.substring(0, 6)}`; // Fallback username
-      const username = await this.generateUniqueUsername(baseUsername);
-
-      // Insert new profile with current timestamp
-      const now = new Date().toISOString();
-      // Define the data to insert, matching the ProfileData type structure (excluding fields with defaults in DB like created_at)
-      const newProfileData: Omit<ProfileData, 'created_at'> & { id: string } = {
-        id: userId,
-        updated_at: now,
-        username,
-        native_language: { code: 'en', name: 'English', direction: 'ltr' }, // Default native language
-        learning_languages: [],
-        current_levels: {},
-        daily_streak: 0,
-        last_practice: null,
-        settings: { hasCompletedOnboarding: false },
-        daily_message_count: 0, // Initialize new fields
-        last_message_date: null
-      };
-
-      console.log('Inserting new profile:', newProfileData);
-
-      const { data: createdProfile, error: insertError } = await supabase
-        .from('profiles')
-        .insert(newProfileData) // Pass the structured data
-        .select<"*", ProfileData>('*') // Specify return type
-        .single(); // Use single() as insert should return exactly one row
-
-      if (insertError) {
-        console.error('Profile creation error:', insertError);
-        // Handle potential race condition if profile was created between check and insert
-        if (insertError.code === '23505') { // unique violation (likely on id)
-          console.log('Profile likely created concurrently, attempting to fetch again');
-          const { data: concurrentProfile, error: concurrentFetchError } = await supabase
-            .from('profiles')
-            .select<"*", ProfileData>('*')
-            .eq('id', userId)
-            .single(); // Use single here, it should exist now
-
-           if (concurrentFetchError) {
-                console.error("Error fetching profile after concurrent insert:", concurrentFetchError);
-                throw concurrentFetchError; // Throw if fetch fails after race condition
-           }
-           if (!concurrentProfile) {
-                console.error("Profile still not found after concurrent insert attempt.");
-                throw new Error("Profile creation failed unexpectedly.");
-           }
-           // Return fetched profile with defaults for new fields
-           return {
-                ...concurrentProfile,
-                daily_message_count: concurrentProfile.daily_message_count ?? 0,
-                last_message_date: concurrentProfile.last_message_date ?? null,
-           };
+      if (existingProfileData) {
+        console.log('ProfileService: Profile already exists:', existingProfileData);
+        const settings = existingProfileData.settings || {};
+        if (typeof settings.hasCompletedOnboarding !== 'boolean') {
+            settings.hasCompletedOnboarding = false; 
         }
-        throw insertError; // Throw other insert errors
-      }
+        if (!settings.hasCompletedOnboarding) {
+            await AsyncStorage.removeItem(`${ONBOARDING_COMPLETED_KEY_PREFIX}${userId}`);
+            console.log(`ProfileService: Cleared AsyncStorage onboarding flag for existing user ${userId} as DB indicates not completed.`);
+        }
+        finalProfileData = {
+            ...existingProfileData,
+            email: email, // Add email from auth context
+            settings: settings,
+            // Ensure defaults for any potentially nullable fields if not present
+            native_language: existingProfileData.native_language || { code: 'en', name: 'English', direction: 'ltr' },
+            learning_languages: existingProfileData.learning_languages || [],
+            current_levels: existingProfileData.current_levels || {},
+            daily_message_count: existingProfileData.daily_message_count ?? 0,
+            last_message_date: existingProfileData.last_message_date ?? null,
+            daily_streak: existingProfileData.daily_streak ?? 0,
+            last_practice: existingProfileData.last_practice ?? null,
+        };
+      } else {
+        // Profile does not exist, create it
+        const baseUsername = email.split('@')[0] || `user_${userId.substring(0, 6)}`;
+        const username = await this.generateUniqueUsername(baseUsername);
+        const now = new Date().toISOString();
+        
+        const newProfileInsert = { // Data to insert into DB
+          id: userId,
+          updated_at: now,
+          username,
+          native_language: { code: 'en', name: 'English', direction: 'ltr' },
+          learning_languages: [],
+          current_levels: {},
+          daily_streak: 0,
+          last_practice: null,
+          settings: { hasCompletedOnboarding: false }, 
+          daily_message_count: 0,
+          last_message_date: null
+        };
 
-      console.log('Profile created successfully:', createdProfile);
-      // Ensure returned profile has defaults for new fields
+        console.log('ProfileService: Inserting new profile:', newProfileInsert);
+        const { data: createdDbProfile, error: insertError } = await supabase
+          .from('profiles')
+          .insert(newProfileInsert)
+          .select('*') 
+          .single();
+
+        if (insertError) {
+          console.error('ProfileService: Profile creation error:', insertError);
+          if (insertError.code === '23505') { 
+            console.log('ProfileService: Profile likely created concurrently, attempting to fetch again');
+            const { data: concurrentProfile, error: concurrentFetchError } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', userId)
+              .single();
+             if (concurrentFetchError) throw concurrentFetchError;
+             if (!concurrentProfile) throw new Error("Profile creation failed unexpectedly (concurrent fetch failed).");
+             finalProfileData = { ...concurrentProfile, email: email, settings: concurrentProfile.settings || { hasCompletedOnboarding: false } };
+          } else {
+            throw insertError;
+          }
+        } else {
+            finalProfileData = { ...createdDbProfile, email: email, settings: createdDbProfile.settings || { hasCompletedOnboarding: false } };
+        }
+        await AsyncStorage.removeItem(`${ONBOARDING_COMPLETED_KEY_PREFIX}${userId}`);
+        console.log(`ProfileService: Cleared AsyncStorage onboarding flag for new user ${userId}.`);
+      }
+      // Adapt ProfileData to AppUserType for the store
       return {
-          ...createdProfile,
-          daily_message_count: createdProfile.daily_message_count ?? 0,
-          last_message_date: createdProfile.last_message_date ?? null,
-      };
+          id: finalProfileData.id,
+          name: finalProfileData.username || email.split('@')[0] || 'User', // Fallback for name
+          email: finalProfileData.email || email, // Ensure email is present
+          nativeLanguage: finalProfileData.native_language,
+          learningLanguages: finalProfileData.learning_languages,
+          currentLevel: finalProfileData.current_levels, // Ensure this matches AppUserType structure
+          // Include other fields from AppUserType if they map from ProfileData
+          settings: finalProfileData.settings // Pass along settings
+      } as AppUserType;
+
     } catch (error) {
-      console.error('Error in setupProfile:', error);
-      // Attempt a final fetch before giving up
-      const { data: finalFetchProfile, error: finalFetchError } = await supabase
-        .from('profiles')
-        .select<"*", ProfileData>('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-       if (finalFetchError && finalFetchError.code !== 'PGRST116') {
-           console.error("Final fetch attempt failed in setupProfile catch block:", finalFetchError);
-       }
-
-      if (finalFetchProfile) {
-          // Return fetched profile with defaults for new fields
-          return {
-            ...finalFetchProfile,
-            daily_message_count: finalFetchProfile.daily_message_count ?? 0,
-            last_message_date: finalFetchProfile.last_message_date ?? null,
-          };
-      }
-      // If still not found or fetch failed, return null
-      return null;
+      console.error('ProfileService: Error in setupProfile:', error);
+      return null; // Return null on error
     }
   }
 
   static async getProfile(userId: string): Promise<ProfileData | null> {
+    console.log(`ProfileService: getProfile called for userId: ${userId}`);
+    if (!userId) {
+        console.warn("ProfileService: getProfile called with no userId.");
+        return null;
+    }
     try {
-      console.log('Fetching profile for:', userId);
       const { data, error } = await supabase
         .from('profiles')
-        .select<"*", ProfileData>('*') // Specify return type
+        .select('*') // Selects all columns from 'profiles' table
         .eq('id', userId)
         .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') { // Ignore 'Not found' error
-        console.error('Error fetching profile:', error);
+      if (error && error.code !== 'PGRST116') {
+        console.error(`ProfileService: Error fetching profile for ${userId} (code: ${error.code}):`, error.message);
         return null;
       }
       if (!data) {
-          console.log(`Profile not found for user ${userId}.`);
+          console.log(`ProfileService: Profile not found for user ${userId}.`);
           return null;
       }
-
-      // Ensure new fields have default values if they are null from DB
+      console.log(`ProfileService: Profile fetched successfully for user ${userId}.`);
+      const settings = data.settings || {};
+      if (typeof settings.hasCompletedOnboarding !== 'boolean') {
+          settings.hasCompletedOnboarding = false;
+      }
+      // Add email from auth user if needed, though it's not directly in 'profiles'
+      const { data: { user: authUser } } = await supabase.auth.getUser();
       return {
           ...data,
+          email: authUser?.email, // Add email from auth context
+          settings: settings,
+          native_language: data.native_language || { code: 'en', name: 'English', direction: 'ltr' },
+          learning_languages: data.learning_languages || [],
+          current_levels: data.current_levels || {},
           daily_message_count: data.daily_message_count ?? 0,
           last_message_date: data.last_message_date ?? null,
+          daily_streak: data.daily_streak ?? 0,
+          last_practice: data.last_practice ?? null,
       };
-    } catch (error) {
-      console.error('Error in getProfile:', error);
+    } catch (outerError) {
+      console.error(`ProfileService: Outer catch block - Unexpected error in getProfile for userId ${userId}:`, outerError);
       return null;
     }
   }
 
   static async hasCompletedOnboarding(userId: string): Promise<boolean> {
+    console.log(`ProfileService: hasCompletedOnboarding called for userId: ${userId}`);
+    if (!userId) {
+        console.warn("ProfileService: hasCompletedOnboarding called with no userId.");
+        return false;
+    }
     try {
-      console.log('Checking if user has completed onboarding:', userId);
-
-      // First check profile settings in the database
       const profile = await this.getProfile(userId);
+      console.log(`ProfileService: hasCompletedOnboarding - Profile fetched for check:`, profile ? `DB Status: ${profile.settings?.hasCompletedOnboarding}` : "Not found in DB");
 
-      if (profile?.settings?.hasCompletedOnboarding === true) {
-        console.log('Found onboarding completed in profile settings');
-        return true;
-      }
-
-      // If not found in profile, check AsyncStorage as fallback
-      const value = await AsyncStorage.getItem(`@onboarding_completed:${userId}`);
-      if (value === 'true') {
-        console.log('Found onboarding completed in AsyncStorage');
-
-        // Update profile settings if found in AsyncStorage but not in profile
-        if (profile) {
-          // Ensure settings object exists before merging
-          const currentSettings = profile.settings || {};
-          await this.updateProfile(userId, {
-            settings: {
-              ...currentSettings,
-              hasCompletedOnboarding: true
-            }
-          });
-          console.log('Updated profile settings from AsyncStorage onboarding status.');
+      if (profile && profile.settings && typeof profile.settings.hasCompletedOnboarding === 'boolean') {
+        const dbStatus = profile.settings.hasCompletedOnboarding;
+        console.log(`ProfileService: User ${userId} onboarding status from DB: ${dbStatus}.`);
+        // Sync AsyncStorage with DB truth
+        if (dbStatus) {
+            await AsyncStorage.setItem(`${ONBOARDING_COMPLETED_KEY_PREFIX}${userId}`, 'true');
         } else {
-            console.warn(`Profile not found for user ${userId}, cannot update onboarding status from AsyncStorage.`);
+            await AsyncStorage.removeItem(`${ONBOARDING_COMPLETED_KEY_PREFIX}${userId}`);
         }
-        return true;
+        return dbStatus;
       }
-
-      console.log('User has not completed onboarding');
+      
+      // If DB profile doesn't exist or settings are missing, it implies onboarding is not complete.
+      // Also, clear any potentially stale AsyncStorage flag in this case.
+      console.log(`ProfileService: User ${userId} - DB profile not definitive or not found. Defaulting to onboarding NOT complete.`);
+      await AsyncStorage.removeItem(`${ONBOARDING_COMPLETED_KEY_PREFIX}${userId}`);
       return false;
+
     } catch (error) {
-      console.error('Error checking onboarding status:', error);
-      return false; // Default to false on error
+      console.error(`ProfileService: Error checking onboarding status for ${userId}:`, error);
+      return false; 
     }
   }
 
-  static async updateProfile(userId: string, updates: ProfileUpdates): Promise<ProfileData | null> {
+  static async updateProfile(userId: string, updates: ProfileUpdates): Promise<AppUserType | null> {
     try {
-      console.log('Updating profile for:', userId, 'with:', updates);
-      // Ensure we don't try to update the primary key 'id' or 'created_at'
-      const { id, created_at, ...validUpdates } = updates as any; // Cast to remove PKs if present
+      console.log('ProfileService: Updating profile for:', userId, 'with:', updates);
+      const { id, updated_at, email, ...validUpdates } = updates as any;
 
       const updatePayload = {
         ...validUpdates,
-        updated_at: new Date().toISOString() // Always update timestamp
+        updated_at: new Date().toISOString()
       };
 
-      const { data, error } = await supabase
+      if (updates.settings && typeof updates.settings.hasCompletedOnboarding === 'boolean') {
+        if (updates.settings.hasCompletedOnboarding) {
+          await AsyncStorage.setItem(`${ONBOARDING_COMPLETED_KEY_PREFIX}${userId}`, 'true');
+          console.log(`ProfileService: AsyncStorage onboarding flag set to true for ${userId}.`);
+        } else {
+          await AsyncStorage.removeItem(`${ONBOARDING_COMPLETED_KEY_PREFIX}${userId}`);
+          console.log(`ProfileService: AsyncStorage onboarding flag removed for ${userId}.`);
+        }
+      }
+
+      const { data: updatedDbProfile, error } = await supabase
         .from('profiles')
         .update(updatePayload)
         .eq('id', userId)
-        .select<"*", ProfileData>('*') // Specify return type
-        .single(); // Expect one row updated
+        .select('*') 
+        .single();
 
       if (error) {
-          console.error("Error updating profile:", error);
-          throw error; // Re-throw Supabase errors
+          console.error("ProfileService: Error updating profile:", error);
+          throw error;
       }
-      if (!data) {
-          console.error(`Profile update for ${userId} returned no data. Profile might not exist.`);
+      if (!updatedDbProfile) {
+          console.error(`ProfileService: Profile update for ${userId} returned no data.`);
           return null;
       }
+      console.log("ProfileService: Profile updated successfully in DB:", updatedDbProfile);
+      
+      // Fetch email from auth to construct the AppUserType
+      const { data: { user: authUser } } = await supabase.auth.getUser();
 
-      console.log("Profile updated successfully:", data);
-      // Ensure returned data has defaults for potentially null fields
-       return {
-          ...data,
-          daily_message_count: data.daily_message_count ?? 0,
-          last_message_date: data.last_message_date ?? null,
-      };
+      // Adapt updated DB data to AppUserType
+      return {
+          id: updatedDbProfile.id,
+          name: updatedDbProfile.username || authUser?.email?.split('@')[0] || 'User',
+          email: authUser?.email || '', // Ensure email is present
+          nativeLanguage: updatedDbProfile.native_language,
+          learningLanguages: updatedDbProfile.learning_languages,
+          currentLevel: updatedDbProfile.current_levels,
+          settings: updatedDbProfile.settings
+      } as AppUserType;
+
     } catch (error) {
-      console.error('Unexpected error in updateProfile:', error);
-      throw error; // Re-throw unexpected errors
+      console.error('ProfileService: Unexpected error in updateProfile:', error);
+      throw error;
     }
   }
 
-
-  // --- NEW METHOD ---
-  /**
-   * Checks if the user is under their daily message limit and increments the count if so.
-   * Resets the count if the date has changed.
-   * @param userId The ID of the user.
-   * @param dailyLimit The maximum number of messages allowed per day.
-   * @returns {Promise<{allowed: boolean, currentCount: number}>} - Whether the message is allowed and the updated count.
-   */
   static async checkAndIncrementMessageCount(userId: string, dailyLimit: number): Promise<{ allowed: boolean; currentCount: number }> {
     if (!userId) {
-      console.error("checkAndIncrementMessageCount: userId is required.");
+      console.error("ProfileService: checkAndIncrementMessageCount - userId is required.");
       return { allowed: false, currentCount: 0 };
     }
-
-    const today = new Date().toISOString().split('T')[0]; // Get 'YYYY-MM-DD'
-
+    const today = new Date().toISOString().split('T')[0];
     try {
-      // Fetch the current count and date using getProfile which handles defaults
       const profileData = await this.getProfile(userId);
-
       if (!profileData) {
-         console.error(`Profile not found for user ${userId} during message count check.`);
-         // If profile doesn't exist, disallow sending messages until it's created
+         console.error(`ProfileService: Profile not found for user ${userId} during message count check.`);
          return { allowed: false, currentCount: 0 };
       }
 
-      let currentCount = profileData.daily_message_count ?? 0; // Use default from getProfile
-      const lastDate = profileData.last_message_date; // Use default from getProfile
+      let currentCount = profileData.daily_message_count ?? 0;
+      const lastDate = profileData.last_message_date;
 
       const updates: ProfileUpdates = {};
       let needsUpdate = false;
 
-      // Reset count if the date has changed
       if (lastDate !== today) {
-        console.log(`Date changed for user ${userId}. Resetting message count from ${currentCount} to 1.`);
-        currentCount = 0; // Reset before check
-        updates.daily_message_count = 1; // Start count at 1 for the current message
+        console.log(`ProfileService: Date changed for user ${userId}. Resetting message count from ${currentCount} to 1.`);
+        currentCount = 0; 
+        updates.daily_message_count = 1;
         updates.last_message_date = today;
         needsUpdate = true;
-      }
-
-      // Check against the limit *after* potential reset
-      if (currentCount >= dailyLimit) {
-        console.log(`User ${userId} reached daily message limit of ${dailyLimit} (Count: ${currentCount}).`);
-        // No need to update DB if limit is reached and date hasn't changed
-        return { allowed: false, currentCount };
-      }
-
-      // If it wasn't reset and limit not reached, prepare to increment the count
-      if (!needsUpdate) {
+      } else {
+        if (currentCount >= dailyLimit) {
+          console.log(`ProfileService: User ${userId} reached daily message limit of ${dailyLimit} (Count: ${currentCount}).`);
+          return { allowed: false, currentCount };
+        }
         updates.daily_message_count = currentCount + 1;
-        // No need to update last_message_date if it's already today
+        if (!updates.last_message_date) updates.last_message_date = today;
         needsUpdate = true;
       }
 
-      // Update the profile in the database if needed
       if (needsUpdate) {
-          console.log(`Attempting to update profile for ${userId} with:`, updates);
-          // Use the updateProfile method to handle the update
-          const updatedProfile = await this.updateProfile(userId, updates);
-
-          if (!updatedProfile) {
-            console.error(`Failed to update message count for user ${userId}. Disallowing message.`);
-            // If update fails, disallow message for safety
-            // The count wasn't successfully incremented in the DB
-            return { allowed: false, currentCount: currentCount }; // Return the count *before* attempted increment
+          console.log(`ProfileService: Attempting to update profile for ${userId} with message count:`, updates);
+          const updatedAppUser = await this.updateProfile(userId, updates); // updateProfile now returns AppUserType
+          if (!updatedAppUser) { // Check if the update was successful
+            console.error(`ProfileService: Failed to update message count for user ${userId}. Disallowing message.`);
+            return { allowed: false, currentCount: profileData.daily_message_count ?? 0 };
           }
-          // Use the count returned from the successful update
-          const finalCount = updatedProfile.daily_message_count ?? 0;
-          console.log(`User ${userId} message count updated to: ${finalCount}`);
+          // To get the updated count, we need to fetch the profile again or map from AppUserType if it contains daily_message_count
+          // For simplicity, let's assume the update was successful and the count is updates.daily_message_count
+          const finalCount = updates.daily_message_count ?? 0;
+          console.log(`ProfileService: User ${userId} message count updated to: ${finalCount}`);
           return { allowed: true, currentCount: finalCount };
-
       } else {
-          // This case should only happen if limit was reached on the same day (no update needed)
-          // We already returned { allowed: false } above in that case.
-          console.log(`checkAndIncrementMessageCount: No DB update needed for user ${userId}. Current count: ${currentCount}`);
-          return { allowed: true, currentCount: currentCount }; // Allow message, count is currentCount
+          console.log(`ProfileService: checkAndIncrementMessageCount - No DB update deemed necessary for user ${userId}. Current count: ${currentCount}`);
+          return { allowed: currentCount < dailyLimit, currentCount: currentCount };
       }
-
     } catch (error) {
-      console.error(`Unexpected error in checkAndIncrementMessageCount for user ${userId}:`, error);
-      return { allowed: false, currentCount: 0 }; // Disallow on unexpected errors
+      console.error(`ProfileService: Unexpected error in checkAndIncrementMessageCount for user ${userId}:`, error);
+      return { allowed: false, currentCount: 0 };
     }
   }
-
-} 
+}

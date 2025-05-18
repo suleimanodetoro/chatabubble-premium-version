@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   StyleSheet,
-  Alert, // Ensure Alert is imported
+  Alert,
   AppState,
   ActivityIndicator,
   FlatList,
@@ -12,8 +12,8 @@ import {
   TextInput,
   Text,
   Keyboard,
-  Platform, // Import Platform
-  ListRenderItemInfo, // Import ListRenderItemInfo for FlatList renderItem type
+  Platform,
+  ListRenderItemInfo,
 } from "react-native";
 import { useLocalSearchParams, useRouter, Stack } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -25,7 +25,7 @@ import {
 } from "@/lib/services/sessionManager";
 import { useAppStore } from "@/hooks/useAppStore";
 import { Session, Scenario, ChatMessage, Language } from "@/types";
-import { Dispatch } from "react"; // Keep Dispatch type
+import { Dispatch } from "react";
 import { OpenAIService } from "@/lib/services/openai";
 import { generateId } from "@/lib/utils/ids";
 import { Heading3, Body1, Body2, Caption } from "@/components/ui/Typography";
@@ -35,18 +35,16 @@ import Animated, {
   FadeIn,
   FadeOut,
   SlideInUp,
-  useAnimatedStyle, // Keep if needed by components below
-  withTiming, // Keep if needed by components below
+  useAnimatedStyle,
+  withTiming,
 } from "react-native-reanimated";
 import { BlurView } from "expo-blur";
-import { ProfileService } from "@/lib/services/profile"; // Import ProfileService
-import { StorageService } from "@/lib/services/storage"; // Import StorageService for saving after AI response
+import { ProfileService } from "@/lib/services/profile";
+import { StorageService } from "@/lib/services/storage";
 
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
-// --- Helper Components (Defined within this file for completeness) ---
-
-// Basic Button Component (Adapt from your Button.tsx if needed)
+// --- Helper Components (Copied from original for brevity, assume they are correct) ---
 const ChatButton = ({
   onPress,
   disabled,
@@ -66,20 +64,20 @@ const ChatButton = ({
 }) => {
   const theme = useTheme();
   const getBackgroundColor = () => {
-    if (disabled) return "#E5E7EB"; // Use a disabled color
+    if (disabled) return "#E5E7EB";
     if (variant === "primary") return theme.colors.primary.main;
-    if (variant === "secondary") return theme.colors.primary.light; // Example secondary color
+    if (variant === "secondary") return theme.colors.primary.light;
     return "transparent";
   };
   const getTextColor = () => {
-    if (disabled) return "#9CA3AF"; // Use a disabled text color
+    if (disabled) return "#9CA3AF";
     if (variant === "primary") return theme.colors.primary.contrast;
-    return theme.colors.primary.main; // Default for secondary/tertiary
+    return theme.colors.primary.main;
   };
   return (
     <TouchableOpacity
       style={[
-        styles.chatButtonBase, // Use a base style
+        styles.chatButtonBase,
         { backgroundColor: getBackgroundColor() },
         style,
       ]}
@@ -109,7 +107,6 @@ const ChatButton = ({
   );
 };
 
-// Basic Chat Input Component (Adapt from your ChatInput.tsx if needed)
 const ChatInput = ({
   onSend,
   loading = false,
@@ -133,7 +130,7 @@ const ChatInput = ({
     if (!text.trim() || isDisabled || loading) return;
     onSend(text.trim());
     setText("");
-    Keyboard.dismiss(); // Dismiss keyboard on send
+    Keyboard.dismiss();
   };
 
   const getPlaceholderText = () => {
@@ -149,7 +146,7 @@ const ChatInput = ({
         { paddingBottom: Math.max(insets.bottom, 12) },
       ]}
     >
-      {targetLanguageName && status === 'active' && ( // Only show language when active
+      {targetLanguageName && status === 'active' && (
         <View style={styles.languageIndicator}>
           <Feather name="globe" size={12} color={theme.colors.text.secondary} />
           <Caption color={theme.colors.text.secondary} style={{ marginLeft: 4 }}>
@@ -170,18 +167,14 @@ const ChatInput = ({
             maxLength={maxLength}
             editable={!isDisabled && !loading}
             scrollEnabled={true}
-            blurOnSubmit={false} // Prevent keyboard dismiss on multiline submit
-            onSubmitEditing={handleSend} // Allow sending via keyboard submit
+            blurOnSubmit={false}
+            onSubmitEditing={handleSend}
           />
-          {/* Placeholder for Voice Button */}
-          {/* <TouchableOpacity style={styles.voiceButton} disabled={isDisabled || loading}>
-            <Feather name="mic" size={20} color={isDisabled ? theme.colors.text.disabled : theme.colors.primary.main} />
-          </TouchableOpacity> */}
         </View>
         <ChatButton
           variant="primary"
           icon="send"
-          style={[styles.sendButton]} // Use specific style
+          style={[styles.sendButton]}
           disabled={!text.trim() || isDisabled || loading}
           onPress={handleSend}
           loading={loading}
@@ -191,7 +184,6 @@ const ChatInput = ({
   );
 };
 
-// Basic Chat Header Component (Adapt from your ChatHeader.tsx if needed)
 const ChatHeader = ({
   title,
   subtitle,
@@ -220,7 +212,6 @@ const ChatHeader = ({
           paddingTop: insets.top,
         },
       ]}
-      // Add layout animation if desired
     >
       <BlurView style={StyleSheet.absoluteFill} tint="light" intensity={95} />
       <View style={styles.headerContent}>
@@ -256,7 +247,6 @@ const ChatHeader = ({
   );
 };
 
-// Basic Scenario Info Card Component (Adapt from your ScenarioInfoCard.tsx if needed)
 const ScenarioInfoCard = ({
   scenario,
   isVisible,
@@ -306,12 +296,9 @@ const ScenarioInfoCard = ({
 };
 // --- End Helper Components ---
 
-
-// Main Chat Screen Component
 export default function ChatScreen() {
   console.log("DEBUG: ChatScreen mounted");
 
-  // --- Hooks and State ---
   const {
     id: sessionIdParam,
     scenarioId: scenarioIdParam,
@@ -324,12 +311,11 @@ export default function ChatScreen() {
 
   const isNewSession = isNewSessionParam === "true";
   const router = useRouter();
-  const { state, dispatch } = useChatContext(); // Use context state and dispatch
-  // Use selectors for stable references to store state and actions
+  const { state, dispatch } = useChatContext();
   const userId = useAppStore(state => state.user?.id);
   const source_language = useAppStore(state => state.source_language);
-  const currentSession = useAppStore(state => state.currentSession);
-  const currentScenario = useAppStore(state => state.currentScenario);
+  const currentSessionFromStore = useAppStore(state => state.currentSession); // Renamed to avoid conflict
+  const currentScenarioFromStore = useAppStore(state => state.currentScenario); // Renamed
   const setCurrentSession = useAppStore(state => state.setCurrentSession);
   const setCurrentScenario = useAppStore(state => state.setCurrentScenario);
 
@@ -338,31 +324,26 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const listRef = useRef<FlatList>(null);
-  const headerHeight = 80 + insets.top; // Adjust as needed based on ChatHeader actual height
+  const headerHeight = 80 + insets.top;
   const [condensedHeader, setCondensedHeader] = useState(false);
-  const [inputHeight, setInputHeight] = useState(80); // Initial guess
+  const [inputHeight, setInputHeight] = useState(80);
   const isUserScrollingRef = useRef(false);
   const scrollTriggerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const initialScrollCompleteRef = useRef(false);
 
-  const listPadding = { paddingBottom: inputHeight + 20 }; // Dynamic padding below list
+  const listPadding = { paddingBottom: inputHeight + 20 };
 
-  // --- Constants ---
-  const DAILY_MESSAGE_LIMIT = 20; // Set your desired limit here
-  const MAX_INPUT_LENGTH = 500;   // Max characters for user input
+  const DAILY_MESSAGE_LIMIT = 20;
+  const MAX_INPUT_LENGTH = 500;
 
-  // --- Callbacks ---
-
-  // Scroll to the bottom of the message list
   const scrollToBottom = useCallback((delay = 200, animated = true) => {
       if (scrollTriggerTimeoutRef.current) {
         clearTimeout(scrollTriggerTimeoutRef.current);
       }
       scrollTriggerTimeoutRef.current = setTimeout(() => {
-        // Use current state.messages from closure
         if (
           listRef.current &&
-          state.messages.length > 0 &&
+          state.messages.length > 0 && // Use context state here
           !isUserScrollingRef.current &&
           isMountedRef.current
         ) {
@@ -373,19 +354,15 @@ export default function ChatScreen() {
           }
         }
       }, delay);
-    // Add state.messages.length as dependency to recreate callback when messages change
-    }, [state.messages.length]);
+    }, [state.messages.length]); // Depend on context's messages length
 
-  // Handle ending the chat session
   const handleEndChat = useCallback(() => {
-    // Use current session from store and messages from context state
-    const sessionToEnd = currentSession;
+    const sessionToEnd = currentSessionFromStore; // Use from store
     if (!sessionToEnd) {
       console.warn("handleEndChat called but currentSession is null/undefined in store");
       return;
     }
-    // Use messages from context state from closure
-    const currentMessages = state.messages;
+    const currentMessages = state.messages; // Use from context
 
     Alert.alert(
       "End Conversation",
@@ -396,20 +373,18 @@ export default function ChatScreen() {
           text: "End",
           style: "destructive",
           onPress: async () => {
-            // Re-read session state inside onPress in case it changed
              const finalSessionToEnd = useAppStore.getState().currentSession;
-             // Read the current context state messages inside the callback
-             const finalMessages = state.messages;
+             const finalMessages = state.messages; // Re-read from context state
             if (!isMountedRef.current || !finalSessionToEnd) return;
             try {
               dispatch({ type: "SET_LOADING", payload: true });
               await SessionManager.handleSessionEnd(
                 finalSessionToEnd,
-                finalMessages, // Use messages from closure
-                true, // Mark as completed
-                false // Not currently processing a message
+                finalMessages,
+                true,
+                false
               );
-              dispatch({ type: "SET_STATUS", payload: "completed" }); // Update local status
+              dispatch({ type: "SET_STATUS", payload: "completed" });
               if (router.canGoBack()) router.back();
               else router.replace("/(tabs)/scenarios");
             } catch (error) {
@@ -423,14 +398,11 @@ export default function ChatScreen() {
         },
       ]
     );
-  // Include state in dependencies to ensure callback has access to latest state
-  }, [dispatch, router, currentSession, state.messages]);
+  }, [dispatch, router, currentSessionFromStore, state.messages]); // Use store and context states
 
-  // Handle navigating back (save or end)
   const handleBack = useCallback(() => {
-    // Use current session from store and messages from context state
-    const sessionToSave = currentSession;
-    const currentMessages = state.messages;
+    const sessionToSave = currentSessionFromStore; // Use from store
+    const currentMessages = state.messages; // Use from context
 
     if (!sessionToSave || currentMessages.length === 0) {
       if (router.canGoBack()) router.back();
@@ -446,13 +418,12 @@ export default function ChatScreen() {
           text: "Save & Continue Later",
           onPress: async () => {
              const finalSessionToSave = useAppStore.getState().currentSession;
-             // Read the current context state messages inside the callback
-             const finalMessages = state.messages;
+             const finalMessages = state.messages; // Re-read from context
             if (!isMountedRef.current || !finalSessionToSave) return;
             try {
               dispatch({ type: "SET_LOADING", payload: true });
-              await SessionManager.handleSessionEnd(finalSessionToSave, finalMessages, false, false); // Mark as saved
-              dispatch({ type: "SET_STATUS", payload: "saved" }); // Update local status
+              await SessionManager.handleSessionEnd(finalSessionToSave, finalMessages, false, false);
+              dispatch({ type: "SET_STATUS", payload: "saved" });
               if (router.canGoBack()) router.back();
               else router.replace("/(tabs)/scenarios");
             } catch (error) {
@@ -468,13 +439,12 @@ export default function ChatScreen() {
           style: "destructive",
           onPress: async () => {
              const finalSessionToEnd = useAppStore.getState().currentSession;
-             // Read the current context state messages inside the callback
-             const finalMessages = state.messages;
+             const finalMessages = state.messages; // Re-read from context
             if (!isMountedRef.current || !finalSessionToEnd) return;
             try {
               dispatch({ type: "SET_LOADING", payload: true });
-              await SessionManager.handleSessionEnd(finalSessionToEnd, finalMessages, true, false); // Mark as completed
-              dispatch({ type: "SET_STATUS", payload: "completed" }); // Update local status
+              await SessionManager.handleSessionEnd(finalSessionToEnd, finalMessages, true, false);
+              dispatch({ type: "SET_STATUS", payload: "completed" });
               if (router.canGoBack()) router.back();
               else router.replace("/(tabs)/scenarios");
             } catch (error) {
@@ -487,20 +457,15 @@ export default function ChatScreen() {
         },
       ]
     );
-  // Include state in dependencies to ensure callback has access to latest state
-  }, [router, dispatch, currentSession, state.messages]);
+  }, [router, dispatch, currentSessionFromStore, state.messages]); // Use store and context states
 
-  // Handle sending a message
   const handleSend = useCallback(
     async (text: string) => {
-      // Use current session, scenario, userId from store hooks
-      const sessionToSend = currentSession;
-      const scenarioToSend = currentScenario;
+      const sessionToSend = currentSessionFromStore; // Use from store
+      const scenarioToSend = currentScenarioFromStore; // Use from store
       const currentUserId = userId;
-      // Access chatContext state directly from closure
-      const chatContextState = state;
+      const chatContextState = state; // Use from context
 
-      // --- Daily Limit Check ---
       if (!currentUserId) {
           console.error("handleSend: Cannot send message, user ID not found.");
           Alert.alert("Error", "Could not verify user. Please restart the app.");
@@ -521,9 +486,7 @@ export default function ChatScreen() {
           Alert.alert("Error", "Could not verify daily message limit. Please try again.");
           return;
       }
-      // --- End Daily Limit Check ---
 
-      // --- Proceed with Sending ---
       const canSend = (chatContextState.status === "active" || chatContextState.status === "saved");
       if (!sessionToSend || !scenarioToSend || !text.trim() || chatContextState.isLoading || !canSend || !isMountedRef.current) {
         console.log("handleSend blocked:", { hasSession: !!sessionToSend, hasScenario: !!scenarioToSend, text: !!text.trim(), isLoading: chatContextState.isLoading, canSend, status: chatContextState.status, isMounted: isMountedRef.current });
@@ -534,10 +497,8 @@ export default function ChatScreen() {
         return;
       }
 
-      // If resuming a saved session, set status back to active
       if (chatContextState.status === "saved") {
         dispatch({ type: "SET_STATUS", payload: "active" });
-        // Update global store session status as well
         setCurrentSession({ ...sessionToSend, status: 'active', lastUpdated: Date.now() });
         console.log("ChatScreen: Status changed from 'saved' to 'active' on send.");
       }
@@ -545,48 +506,42 @@ export default function ChatScreen() {
       const userMessageId = generateId();
       const newUserMessage: ChatMessage = {
         id: userMessageId,
-        content: { original: text, translated: "..." }, // Placeholder for translation
+        content: { original: text, translated: "..." },
         sender: "user",
         timestamp: Date.now(),
         isEdited: false,
       };
 
-      // Optimistic UI updates
-      dispatch({ type: "SET_LOADING", payload: true }); // Indicate processing starts
+      dispatch({ type: "SET_LOADING", payload: true });
       dispatch({ type: "ADD_MESSAGE", payload: newUserMessage });
       Keyboard.dismiss();
-      scrollToBottom(100); // Scroll quickly after adding user message
+      scrollToBottom(100);
 
-      // Capture state *after* adding user message for saving
-      // We need to re-read messages after dispatching ADD_MESSAGE
-      // We'll use the current state.messages plus our new message as an optimization
-      const messagesAfterUserAdd = [...state.messages, newUserMessage];
-      const statusForSave = state.status; // Use current status after potential update
+      // The state.messages in the closure is the one *before* ADD_MESSAGE.
+      const messagesBeforeUserAdd = chatContextState.messages;
+
       const sessionAfterUserAdd: Session = {
         ...sessionToSend,
-        messages: messagesAfterUserAdd, // Include the new message for local save
+        messages: [...messagesBeforeUserAdd, newUserMessage], // Manually add for local save
         lastUpdated: Date.now(),
-        status: statusForSave // Use potentially updated status
+        status: 'active' // Ensure status is active for saving
       };
 
-      // Save user message state locally immediately
       try {
         await SessionManager.handleSessionUpdate(
           sessionAfterUserAdd,
-          messagesAfterUserAdd,
-          false // Encryption handled by SessionManager if needed
+          [...messagesBeforeUserAdd, newUserMessage], // Pass the constructed list
+          false
         );
         console.log(`ChatScreen: Initial local save complete for user message ${userMessageId}`);
       } catch (localSaveError) {
         console.error("ChatScreen: Error saving user message locally:", localSaveError);
       } finally {
-        // Set loading false AFTER initial local save, BEFORE long AI call
         if (isMountedRef.current) {
           dispatch({ type: "SET_LOADING", payload: false });
         }
       }
 
-      // --- Background AI processing ---
       const processAIResponse = async () => {
         let aiMessage: ChatMessage | null = null;
         let updatedUserMessageWithTranslation: ChatMessage | null = null;
@@ -594,21 +549,18 @@ export default function ChatScreen() {
         try {
           if (!isMountedRef.current) throw new Error("Component unmounted before AI processing");
 
-          // Re-fetch current state inside async function
           const currentSessionForAI = useAppStore.getState().currentSession;
           const currentScenarioForAI = useAppStore.getState().currentScenario;
           if (!currentSessionForAI || !currentScenarioForAI) throw new Error("Session or Scenario missing for AI processing");
 
-          dispatch({ type: "SET_LOADING", payload: true }); // Indicate AI processing started
+          dispatch({ type: "SET_LOADING", payload: true });
 
-          // 1. Translate user text
           const translatedUserText = await OpenAIService.translateText(
             text,
             currentSessionForAI.target_language.name
           );
           if (!isMountedRef.current) throw new Error("Component unmounted during user translation");
 
-          // Update the user message in the UI with the translation
           updatedUserMessageWithTranslation = {
             ...newUserMessage,
             content: { original: text, translated: translatedUserText },
@@ -617,26 +569,21 @@ export default function ChatScreen() {
             type: "UPDATE_MESSAGE",
             payload: { id: newUserMessage.id, message: updatedUserMessageWithTranslation },
           });
+          
+          // CORRECTED: Construct messagesForAI using the closure's state.messages (before ADD_MESSAGE)
+          // and append the fully formed updatedUserMessageWithTranslation.
+          const messagesForAI = [...messagesBeforeUserAdd, updatedUserMessageWithTranslation];
 
-          // 2. Prepare messages for API call (using state AFTER user message update)
-          // We need to capture the messages list *after* the UPDATE_MESSAGE dispatch
-          // Access the context state messages directly for re-reading
-          const latestMessagesAfterUpdate = state.messages.map((m) =>
-            m.id === newUserMessage.id ? updatedUserMessageWithTranslation! : m
-          );
-
-          // 3. Call AI
           const aiResponseText = await OpenAIService.generateChatCompletion(
-            latestMessagesAfterUpdate,
+            messagesForAI, // Use the corrected list
             currentScenarioForAI,
             currentSessionForAI.target_language.name
           );
           if (!isMountedRef.current) throw new Error("Component unmounted during AI generation");
 
-          // 4. Translate AI response
           const translatedAiText = await OpenAIService.translateText(
             aiResponseText,
-            "English" // Assuming target is English for display
+            "English"
           );
           if (!isMountedRef.current) throw new Error("Component unmounted during AI translation");
 
@@ -648,32 +595,26 @@ export default function ChatScreen() {
             isEdited: false,
           };
 
-          // 5. Update State, Save, and Sync (if component still mounted)
           if (isMountedRef.current) {
-            // Get latest messages state again before adding AI message
-            const currentMessagesBeforeAIAdd = state.messages;
-            // Ensure user message update is included if it happened
-            const updatedMessagesBeforeAIAdd = currentMessagesBeforeAIAdd.map(
-              (m) => m.id === newUserMessage.id ? (updatedUserMessageWithTranslation || m) : m
-            );
-            const finalMessages = [...updatedMessagesBeforeAIAdd, aiMessage];
-
-            dispatch({ type: "ADD_MESSAGE", payload: aiMessage }); // Add AI message to local context
+            // The context's state.messages will have been updated by ADD_MESSAGE and UPDATE_MESSAGE.
+            // So, when we ADD_MESSAGE for aiMessage, it appends to the correct list.
+            dispatch({ type: "ADD_MESSAGE", payload: aiMessage });
 
             // Construct final session state for saving/syncing
-            const finalSessionState: Session = {
-              ...(useAppStore.getState().currentSession || sessionToSend), // Use latest from store or fallback
-              messages: finalMessages, // Include AI message
-              lastUpdated: Date.now(),
-              status: 'active', // Ensure status is active after interaction
-            };
-            setCurrentSession(finalSessionState); // Update global store
+            // Get the latest messages from the context after all dispatches for user and AI messages
+            const finalMessages = [...messagesForAI, aiMessage]; // This is the most accurate list now
 
-            // Save locally (including AI message)
+            const finalSessionState: Session = {
+              ...(useAppStore.getState().currentSession || sessionToSend),
+              messages: finalMessages,
+              lastUpdated: Date.now(),
+              status: 'active',
+            };
+            setCurrentSession(finalSessionState);
+
             await SessionManager.handleSessionUpdate(finalSessionState, finalMessages, false);
             console.log(`ChatScreen: Final local save for ${finalSessionState.id} after AI response`);
 
-            // Attempt final sync
             await SessionManager.syncToSupabase(finalSessionState);
             console.log(`ChatScreen: Final sync attempt for ${finalSessionState.id} finished`);
           }
@@ -681,57 +622,46 @@ export default function ChatScreen() {
           console.error("ChatScreen: Error during background AI processing:", error);
           if (isMountedRef.current) {
             Alert.alert("Error", `Failed to get AI response: ${error instanceof Error ? error.message : "Unknown error"}`);
-            // Update user message with error state if translation failed or AI failed
             dispatch({
               type: "UPDATE_MESSAGE",
               payload: {
                 id: userMessageId,
                 message: {
-                  ...newUserMessage,
+                  ...newUserMessage, // Use the original newUserMessage structure
                   content: {
-                    original: text,
+                    original: text, // Keep original text
                     translated: updatedUserMessageWithTranslation?.content.translated ?? "(Translation failed)",
                   },
-                  // Optionally add an error flag to the message state
                 },
               },
             });
           }
         } finally {
           if (isMountedRef.current) {
-            dispatch({ type: "SET_LOADING", payload: false }); // Stop loading indicator
+            dispatch({ type: "SET_LOADING", payload: false });
           }
         }
       };
-
-      // Start the background processing without awaiting it
       processAIResponse();
     },
-    // Include state in dependencies to ensure callback has access to latest state
-    [dispatch, scrollToBottom, userId, currentSession, currentScenario, state, setCurrentSession]
+    [dispatch, scrollToBottom, userId, currentSessionFromStore, currentScenarioFromStore, state, setCurrentSession]
   );
-  // --- END handleSend ---
 
-
-  // --- Effects ---
-
-  // Effect to handle app state changes (backgrounding)
   useEffect(() => {
     console.log("DEBUG: ChatScreen AppState useEffect setup.");
     const appStateSubscription = AppState.addEventListener("change", (nextAppState) => {
-        // Read store state using getState, but context state directly from closure
         const session = useAppStore.getState().currentSession;
-        const messages = state.messages; // Access from parent closure
-        const status = state.status;   // Access from parent closure
+        const messagesCtx = state.messages; // Use from context
+        const statusCtx = state.status;   // Use from context
         const scenario = useAppStore.getState().currentScenario;
         const currentUserId = useAppStore.getState().user?.id;
         const currentSourceLang = useAppStore.getState().source_language;
 
         if (
           session &&
-          messages.length > 0 &&
+          messagesCtx.length > 0 &&
           (nextAppState === "background" || nextAppState === "inactive") &&
-          status === 'active'
+          statusCtx === 'active'
         ) {
           console.log(`ChatScreen: App state changed to ${nextAppState}. Saving session ${session.id}...`);
           const sessionToSaveOnBackground: Session = {
@@ -740,15 +670,14 @@ export default function ChatScreen() {
             scenarioId: scenario?.id || "",
             target_language: scenario?.target_language || { code: "en", name: "English", direction: "ltr" },
             source_language: currentSourceLang || { code: "en", name: "English", direction: "ltr" },
-            messages: [],
+            messages: [], // Messages will be taken from context by handleSessionEnd
             startTime: session.startTime || Date.now(),
             lastUpdated: Date.now(),
             scenario: scenario || undefined,
-            status: 'saved',
+            status: 'saved', // Explicitly set to saved
           };
 
-          // Call SessionManager without checking isMountedRef inside listener
-          SessionManager.handleSessionEnd(sessionToSaveOnBackground, messages, false, false)
+          SessionManager.handleSessionEnd(sessionToSaveOnBackground, messagesCtx, false, false)
             .then(() => console.log(`Session ${session.id} saved on background.`))
             .catch((error) => console.error("SessionManager: Error saving session on app state change:", error));
         }
@@ -756,63 +685,50 @@ export default function ChatScreen() {
     );
 
     isMountedRef.current = true;
-
-    // Cleanup function
     return () => {
       console.log(`\n🚨 DEBUG: ChatScreen AppState Cleanup Triggered! 🚨\n`);
       isMountedRef.current = false;
-      appStateSubscription.remove(); // Remove the listener
-
-      // Remove unmount save logic from here - let background listener handle it
-      console.log(`DEBUG: ChatScreen Unmount Cleanup - Unmount save logic removed.`);
-
+      appStateSubscription.remove();
       if (scrollTriggerTimeoutRef.current) {
         clearTimeout(scrollTriggerTimeoutRef.current);
       }
     };
-  // Add state dependencies if we're using it in the listener
-  }, [state.messages, state.status]);
+  }, [state.messages, state.status]); // Depend on context state
 
-  // Effect to load initial chat state
   useEffect(() => {
     let loadTimeoutId: NodeJS.Timeout | null = null;
     let isMounted = true;
     isMountedRef.current = true;
 
-    // Get stable references or values needed inside async function
-    const currentSourceLang = source_language; // Use value from hook scope
+    const currentSourceLangVal = source_language; // Capture from hook scope
     const routerRef = router;
     const dispatchRef = dispatch;
     const setCurrentScenarioRef = setCurrentScenario;
     const setCurrentSessionRef = setCurrentSession;
-
 
     async function loadChatState() {
         console.log("DEBUG: Loading useEffect starting...");
         const sessionId = typeof sessionIdParam === "string" ? sessionIdParam : undefined;
         const scenarioId = typeof scenarioIdParam === "string" ? scenarioIdParam : undefined;
 
-        // --- Essential Checks ---
         if (!sessionId || !scenarioId) {
             console.error("ChatScreen: Missing session ID or scenario ID parameter.");
             if(isMounted) Alert.alert("Error", "Could not load chat session (missing ID).");
             if(routerRef.canGoBack()) routerRef.back(); else routerRef.replace("/(tabs)/scenarios");
             return;
         }
-        // userId is included in dependency array, so it's stable here
         if (!userId) {
             console.error("ChatScreen: User ID not available.");
             if(isMounted) Alert.alert("Error", "User information not available.");
             if(routerRef.canGoBack()) routerRef.back(); else routerRef.replace("/(auth)/login");
             return;
         }
-        if (isNewSession && !currentSourceLang) { // Use source lang fetched inside effect
+        if (isNewSession && !currentSourceLangVal) {
             console.error("ChatScreen: Source language not available for new session.");
              if(isMounted) Alert.alert("Error", "Default language information not available.");
             if(routerRef.canGoBack()) routerRef.back(); else routerRef.replace("/(tabs)/scenarios");
             return;
         }
-        // --- End Checks ---
 
         console.log(`DEBUG: loadChatState - Attempting load/create for session ${sessionId}, scenario ${scenarioId}, User: ${userId}, isNew: ${isNewSession}`);
         try {
@@ -825,7 +741,7 @@ export default function ChatScreen() {
 
           console.log(`DEBUG: Calling SessionManager.loadOrCreateSession for ${sessionId}`);
           const result = await SessionManager.loadOrCreateSession(
-            sessionId, scenarioId, userId, isNewSession, currentSourceLang, dispatchRef
+            sessionId, scenarioId, userId, isNewSession, currentSourceLangVal, dispatchRef
           );
           console.log(`DEBUG: SessionManager.loadOrCreateSession call completed for ${sessionId}`);
 
@@ -835,17 +751,14 @@ export default function ChatScreen() {
             const { session: loadedSession, scenario: loadedScenario, messages: loadedMessages } = result;
             console.log(`DEBUG: Loaded/Created Session Status: ${loadedSession.status}, Messages: ${loadedMessages.length}`);
 
-            // Dispatch updates to context
             dispatchRef({ type: "SET_SESSION", payload: loadedSession.id });
             dispatchRef({ type: "LOAD_MESSAGES", payload: loadedMessages });
             dispatchRef({ type: "SET_STATUS", payload: loadedSession.status });
 
-            // Update global store using stable refs
             setCurrentScenarioRef(loadedScenario);
             setCurrentSessionRef(loadedSession);
             console.log("DEBUG: Global State updates complete.");
 
-            // Schedule scroll to bottom logic
             loadTimeoutId = setTimeout(() => {
               if (listRef.current && isMountedRef.current) {
                 scrollToBottom(0, false);
@@ -872,7 +785,6 @@ export default function ChatScreen() {
 
     loadChatState();
 
-    // Cleanup function
     return () => {
       console.log("DEBUG: Loading useEffect cleanup running.");
       isMounted = false;
@@ -881,24 +793,20 @@ export default function ChatScreen() {
         clearTimeout(loadTimeoutId);
       }
     };
-  // STABILIZED Dependencies: Only re-run if the core identifiers change.
-  }, [ sessionIdParam, scenarioIdParam, isNewSessionParam, userId, dispatch, router, setCurrentScenario, setCurrentSession, source_language ]);
+  }, [ sessionIdParam, scenarioIdParam, isNewSessionParam, userId, dispatch, router, setCurrentScenario, setCurrentSession, source_language ]); // Added source_language
 
-  // Effect to scroll when new messages are added (after initial load)
   useEffect(() => {
     if (
       state.messages.length > 0 &&
       initialScrollCompleteRef.current &&
       !isUserScrollingRef.current
     ) {
-      scrollToBottom(300, true); // Scroll animated after initial load
+      scrollToBottom(300, true);
     }
-  // Depend on state.messages.length and the stable scrollToBottom callback
   }, [state.messages.length, scrollToBottom]);
 
-  // --- List Optimization ---
   const getItemLayout = useCallback((data: any, index: number) => {
-    const ESTIMATED_ITEM_HEIGHT = 80; // Adjust based on average bubble height
+    const ESTIMATED_ITEM_HEIGHT = 80;
     return {
       length: ESTIMATED_ITEM_HEIGHT,
       offset: ESTIMATED_ITEM_HEIGHT * index,
@@ -906,10 +814,7 @@ export default function ChatScreen() {
     };
   }, []);
 
-  // --- Render Logic ---
-
-  // Loading state display
-  if (state.isLoading && (state.messages.length === 0 || !currentScenario)) {
+  if (state.isLoading && (state.messages.length === 0 || !currentScenarioFromStore)) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={theme.colors.primary.main} />
@@ -918,21 +823,19 @@ export default function ChatScreen() {
     );
   }
 
-  // Main screen render
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       <ChatHeader
-        title={currentScenario?.title ?? "Loading Scenario..."}
-        subtitle={currentSession?.target_language?.name ?? "..."}
+        title={currentScenarioFromStore?.title ?? "Loading Scenario..."}
+        subtitle={currentSessionFromStore?.target_language?.name ?? "..."}
         onBack={handleBack}
-        onInfo={() => currentScenario && setShowInfo(true)}
+        onInfo={() => currentScenarioFromStore && setShowInfo(true)}
         onEndChat={handleEndChat}
         canEndChat={state.status === "active" && state.messages.length > 0}
         condensed={condensedHeader}
       />
 
-      {/* Banner for ended sessions */}
       {state.status === "completed" && (
         <View style={styles.statusBanner}>
           <Text style={styles.statusText}>Conversation Ended</Text>
@@ -946,24 +849,21 @@ export default function ChatScreen() {
         </View>
       )}
 
-      {/* Messages List */}
       <FlatList
         ref={listRef}
-        data={state.messages} // Use messages from context state
+        data={state.messages}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }: ListRenderItemInfo<ChatMessage>) => <ChatBubble message={item} />} // Typed renderItem
+        renderItem={({ item }: ListRenderItemInfo<ChatMessage>) => <ChatBubble message={item} />}
         contentContainerStyle={[
           styles.messagesList,
-          { paddingTop: headerHeight + (state.status === "completed" ? 60 : 20) }, // Adjust padding based on banner
-          listPadding, // Dynamic bottom padding based on input height
+          { paddingTop: headerHeight + (state.status === "completed" ? 60 : 20) },
+          listPadding,
         ]}
-        // User interaction handlers for scroll management
         onScrollBeginDrag={() => { isUserScrollingRef.current = true; }}
         onMomentumScrollEnd={() => { setTimeout(() => { isUserScrollingRef.current = false; }, 300); }}
-        // Update header condensation based on scroll position
         onScroll={(event) => { setCondensedHeader(event.nativeEvent.contentOffset.y > 50); }}
         scrollEventThrottle={16}
-        ListEmptyComponent={ // Show prompt if list is empty and not loading
+        ListEmptyComponent={
           !state.isLoading ? (
             <View style={styles.emptyChat}>
               <View style={styles.emptyIconContainer}>
@@ -973,50 +873,46 @@ export default function ChatScreen() {
                 Start the conversation by sending a message.
               </Body1>
             </View>
-          ) : null // Don't show empty state while loading initially
+          ) : null
         }
-        getItemLayout={getItemLayout} // Performance optimization
+        getItemLayout={getItemLayout}
         initialNumToRender={15}
         maxToRenderPerBatch={10}
         windowSize={11}
-        keyboardDismissMode="interactive" // Allow dismissing keyboard by dragging list
-        keyboardShouldPersistTaps="handled" // Handle taps inside ScrollView
-        inverted={false} // Keep messages in chronological order (standard chat)
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+        inverted={false}
       />
 
-
-      {/* Input Area */}
       <View
         style={styles.inputWrapper}
         onLayout={(event) => {
           const height = event.nativeEvent.layout.height;
-          if (height !== inputHeight) setInputHeight(height); // Update padding based on input height
+          if (height !== inputHeight) setInputHeight(height);
         }}
       >
         <ChatInput
           onSend={handleSend}
-          loading={state.isLoading}
-          targetLanguageName={currentSession?.target_language?.name ?? ""}
-          status={state.status} // Pass status from context
+          loading={state.isLoading} // Use context isLoading
+          targetLanguageName={currentSessionFromStore?.target_language?.name ?? ""}
+          status={state.status}
           maxLength={MAX_INPUT_LENGTH}
         />
       </View>
 
-      {/* Scenario Info Modal */}
       <ScenarioInfoCard
-        scenario={currentScenario} // Use scenario from store
+        scenario={currentScenarioFromStore}
         isVisible={showInfo}
         onClose={() => setShowInfo(false)}
       />
     </View>
   );
-} // End of ChatScreen component
+}
 
-// --- Styles ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F9FAFB", // Use a slightly off-white background
+    backgroundColor: "#F9FAFB",
   },
   loadingContainer: {
     flex: 1,
@@ -1024,32 +920,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#F9FAFB",
   },
-  // Header Styles
   header: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     zIndex: 10,
-    // Removed borderBottomWidth for BlurView effect
   },
   headerContent: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1, // Ensure content takes full height available within header bounds
+    flex: 1,
     paddingHorizontal: 16,
-    // paddingBottom: 8, // Adjust padding as needed
   },
   backButton: {
-    padding: 8, // Add padding for easier tapping
+    padding: 8,
     marginRight: 8,
-    marginLeft: -8, // Offset padding
+    marginLeft: -8,
   },
   headerTitleContainer: {
     flex: 1,
     justifyContent: "center",
-    alignItems: 'center', // Center title/subtitle
-    marginHorizontal: 8, // Add margin to prevent overlap with buttons
+    alignItems: 'center',
+    marginHorizontal: 8,
   },
   headerTitle: {
     textAlign: "center",
@@ -1064,15 +957,14 @@ const styles = StyleSheet.create({
   },
   infoButton: {
     padding: 8,
-    marginLeft: 4, // Reduced margin
+    marginLeft: 4,
   },
-  // Status Banner Styles
   statusBanner: {
     position: "absolute",
-    top: 100, // Adjust based on header height
+    top: 100, 
     left: 16,
     right: 16,
-    backgroundColor: "#FEF2F2", // Light red background
+    backgroundColor: "#FEF2F2", 
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -1087,7 +979,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   statusText: {
-    color: "#B91C1C", // Darker red text
+    color: "#B91C1C", 
     fontSize: 14,
     fontWeight: "500",
   },
@@ -1095,31 +987,30 @@ const styles = StyleSheet.create({
        paddingVertical: 4,
        paddingHorizontal: 12,
        height: 32,
-       backgroundColor: 'rgba(220, 38, 38, 0.1)', // Lighter red background for button
+       backgroundColor: 'rgba(220, 38, 38, 0.1)', 
        borderRadius: 16,
    },
    statusBannerButtonText: {
        fontSize: 14,
-       color: '#DC2626', // Red text for button
+       color: '#DC2626', 
        fontWeight: '500',
    },
-  // Messages List Styles
   messagesList: {
     paddingHorizontal: 16,
-    flexGrow: 1, // Ensure it can grow to push input down
+    flexGrow: 1,
   },
   emptyChat: {
-    flex: 1, // Take remaining space
-    justifyContent: 'center', // Center vertically
+    flex: 1,
+    justifyContent: 'center',
     alignItems: "center",
     padding: 20,
-    marginTop: 100, // Adjust as needed
+    marginTop: 100,
   },
   emptyIconContainer: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: "#F3F4F6", // Light gray background
+    backgroundColor: "#F3F4F6",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
@@ -1128,18 +1019,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 250,
   },
-  // Input Area Styles
   inputWrapper: {
-    // Position fixed at bottom handled by layout, not absolute positioning
-    backgroundColor: "#fff", // White background for input area
+    backgroundColor: "#fff",
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "rgba(0,0,0,0.1)",
-    // Removed shadow for a flatter look, adjust if needed
   },
   inputContainer: {
     paddingHorizontal: 16,
     paddingTop: 12,
-    // paddingBottom handled by safe area in ChatInput
   },
   languageIndicator: {
     flexDirection: "row",
@@ -1147,25 +1034,25 @@ const styles = StyleSheet.create({
     gap: 4,
     marginBottom: 8,
     paddingHorizontal: 4,
-    alignSelf: 'flex-start', // Align to the left
+    alignSelf: 'flex-start',
   },
   inputRow: {
     flexDirection: "row",
-    alignItems: "flex-end", // Align items to bottom (for multiline input)
+    alignItems: "flex-end",
     gap: 8,
   },
   textInputContainer: {
     flex: 1,
-    minHeight: 44, // Ensure minimum tap height
-    maxHeight: 120, // Limit expansion
-    borderRadius: 22, // Fully rounded corners
+    minHeight: 44,
+    maxHeight: 120,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: "#E5E7EB", // Light gray border
-    backgroundColor: "#F9FAFB", // Off-white background
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
     paddingHorizontal: 16,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 8, // Adjust padding for platform
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
     flexDirection: "row",
-    alignItems: "center", // Center single-line text vertically
+    alignItems: "center",
   },
   disabledInput: {
     backgroundColor: "#F3F4F6",
@@ -1174,24 +1061,21 @@ const styles = StyleSheet.create({
   textInput: {
     flex: 1,
     fontSize: 16,
-    color: '#1E293B', // Darker text
-    paddingTop: 0, // Remove default padding
+    color: '#1E293B',
+    paddingTop: 0,
     paddingBottom: 0,
-    // maxHeight handled by container
   },
-  voiceButton: { // Placeholder style
+  voiceButton: {
     padding: 8,
     marginLeft: 4,
   },
   sendButton: {
-    width: 44, // Circular button
+    width: 44,
     height: 44,
-    borderRadius: 22, // Fully rounded
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
-    // backgroundColor set by ChatButton variant
   },
-  // Scenario Info Card Styles
   infoCardContainer: {
     position: "absolute",
     top: 0,
@@ -1207,7 +1091,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingHorizontal: 24,
     paddingTop: 12,
-    paddingBottom: 34, // Add padding for safe area
+    paddingBottom: 34,
     maxHeight: "80%",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -5 },
@@ -1218,7 +1102,7 @@ const styles = StyleSheet.create({
   infoCardHandle: {
     width: 40,
     height: 4,
-    backgroundColor: "#CBD5E1", // Lighter handle color
+    backgroundColor: "#CBD5E1",
     borderRadius: 2,
     alignSelf: "center",
     marginBottom: 16,
@@ -1234,8 +1118,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     marginBottom: 12,
-    fontSize: 18, // Slightly smaller section title
-    color: '#374151', // Darker gray
+    fontSize: 18,
+    color: '#374151',
   },
   personaSection: {
     marginBottom: 24,
@@ -1255,7 +1139,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#4A6FFF", // Example color, use theme if available
+    backgroundColor: "#4A6FFF",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -1271,7 +1155,7 @@ const styles = StyleSheet.create({
   infoTags: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12, // Increased gap
+    gap: 12,
   },
   infoTag: {
     flexDirection: "row",
@@ -1284,9 +1168,8 @@ const styles = StyleSheet.create({
   closeButton: {
     alignSelf: "center",
     minWidth: 120,
-    marginTop: 24, // Increased margin
+    marginTop: 24,
   },
-  // Chat Button Styles (Basic)
   chatButtonBase: {
       height: 44,
       borderRadius: 22,
@@ -1300,3 +1183,4 @@ const styles = StyleSheet.create({
       fontSize: 16,
   },
 });
+

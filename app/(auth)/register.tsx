@@ -1,4 +1,4 @@
-// app/(auth)/register.tsx
+// app/auth/register.tsx
 import { useState } from 'react';
 import {
   StyleSheet,

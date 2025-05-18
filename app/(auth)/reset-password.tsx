@@ -1,4 +1,4 @@
-// app/(auth)/reset-password.tsx
+// app/auth/reset-password.tsx
 import { useState, useEffect } from 'react';
 import {
   StyleSheet,
