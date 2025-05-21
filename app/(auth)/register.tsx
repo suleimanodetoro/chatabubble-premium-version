@@ -1,4 +1,5 @@
-// app/auth/register.tsx
+// app/(auth)/register.tsx
+
 import { useState } from 'react';
 import {
   StyleSheet,
@@ -7,23 +8,19 @@ import {
   TouchableOpacity,
   Platform,
   KeyboardAvoidingView,
-  ScrollView
+  ScrollView,
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
-import { useTheme } from '@/lib/theme/theme';
 import { AuthService } from '@/lib/services/auth';
 import { AppleSignInButton } from "@/components/ui/AppleSignInButton";
 import { GoogleSignInButton } from "@/components/ui/GoogleSignInButton";
-import { Heading1, Heading2, Body1, Body2, Caption } from "@/components/ui/Typography";
+import { Heading1, Heading2, Body1, Caption } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Feather } from '@expo/vector-icons';
 import { ThemedView } from '@/components/ThemedView';
-import Animated, { 
-  FadeInDown, 
-  FadeIn
-} from "react-native-reanimated";
+import Animated, { FadeInDown, FadeIn } from "react-native-reanimated";
 
 export default function RegisterScreen() {
   const [email, setEmail] = useState('');
@@ -31,7 +28,6 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const theme = useTheme();
 
   const validateForm = () => {
     if (!email || !password || !confirmPassword) {
@@ -44,14 +40,12 @@ export default function RegisterScreen() {
       return false;
     }
 
-    // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       Alert.alert('Error', 'Please enter a valid email address');
       return false;
     }
 
-    // Password strength validation
     if (password.length < 6) {
       Alert.alert('Error', 'Password must be at least 6 characters');
       return false;
@@ -116,7 +110,7 @@ export default function RegisterScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={styles.container} lightColor="#ffffff">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoidingView}
@@ -130,7 +124,7 @@ export default function RegisterScreen() {
             entering={FadeInDown.delay(200).springify()}
           >
             <View style={styles.logoCircle}>
-              <Feather name="message-circle" size={40} color={theme.colors.primary.main} />
+              <Feather name="message-circle" size={40} color="#2E7D32" />
             </View>
             <Heading1 style={styles.appName}>ChataBubble</Heading1>
             <Body1 style={styles.tagline}>Create your account</Body1>
@@ -148,7 +142,9 @@ export default function RegisterScreen() {
                   {Platform.OS === "ios" && (
                     <AppleSignInButton onPress={handleAppleSignIn} disabled={loading} />
                   )}
-                  <GoogleSignInButton onPress={handleGoogleSignIn} disabled={loading} />
+                  {Platform.OS !== 'ios' && (
+                    <GoogleSignInButton onPress={handleGoogleSignIn} disabled={loading} />
+                  )}
                 </View>
                 
                 <View style={styles.divider}>
@@ -211,7 +207,7 @@ export default function RegisterScreen() {
             <Body1>Already have an account?</Body1>
             <Link href="/login" asChild>
               <TouchableOpacity style={styles.signInButton}>
-                <Body1 weight="semibold" color={theme.colors.primary.main}>
+                <Body1 weight="semibold" color="#2E7D32">
                   Sign In
                 </Body1>
               </TouchableOpacity>
@@ -226,6 +222,7 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#ffffff',
   },
   keyboardAvoidingView: {
     flex: 1,
@@ -243,7 +240,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: "rgba(46, 125, 50, 0.1)", // Using primary color with opacity
+    backgroundColor: "rgba(46, 125, 50, 0.1)",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 16,

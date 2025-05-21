@@ -60,7 +60,8 @@
     "react-native-webview": "13.12.5",
     "uuid": "^11.0.3",
     "zustand": "^5.0.1",
-    "jest-expo": "~52.0.6"
+    "jest-expo": "~52.0.6",
+    "expo-dev-client": "~5.0.20"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

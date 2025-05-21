@@ -1,11 +1,18 @@
-// app/auth/login.tsx
+// googleone/app/(auth)/login.tsx
+// Changes:
+// 1. Imported Platform.
+// 2. Modified ThemedView to pass theme.colors.background.default (a light color)
+//    to *both* lightColor and darkColor props. This forces a light background
+//    regardless of the system theme.
+// 3. Conditionally rendered the Google Sign-In TouchableOpacity to hide it on iOS.
+
 import { useState, useEffect } from "react";
 import {
   StyleSheet,
   Alert,
   View,
   TouchableOpacity,
-  Platform,
+  Platform, // Imported Platform
   KeyboardAvoidingView,
   ScrollView,
   TextInput,
@@ -18,7 +25,7 @@ import { AuthService } from "@/lib/services/auth";
 import { supabase } from "@/lib/supabase/client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather } from '@expo/vector-icons';
-import { FontAwesome } from '@expo/vector-icons'; // Added for Apple icon
+import { FontAwesome } from '@expo/vector-icons'; 
 import Animated, { 
   FadeInDown,
   FadeIn
@@ -29,7 +36,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const theme = useTheme();
+  const theme = useTheme(); // theme from lib/theme/theme.ts (static light colors)
 
   const handleAppleSignIn = async () => {
     try {
@@ -56,14 +63,12 @@ export default function LoginScreen() {
     try {
       console.log("Attempting login with email:", email);
       
-      // First, check if there's an existing session and sign it out
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData.session) {
         console.log("Found existing session, signing out first");
         await supabase.auth.signOut();
       }
       
-      // Improved error handling for login
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
@@ -74,7 +79,6 @@ export default function LoginScreen() {
       if (data.user) {
         console.log("Login successful for user:", data.user.id);
         
-        // Add a delay before redirecting to avoid race conditions
         setTimeout(() => {
           router.replace("/(tabs)");
         }, 500);
@@ -104,17 +108,14 @@ export default function LoginScreen() {
     }
   };
 
-  // For debugging
   useEffect(() => {
     const testSupabaseSetup = async () => {
       console.log("Testing Supabase setup...");
       
-      // Check current session
       const { data: sessionData, error: sessionError } =
         await supabase.auth.getSession();
       console.log("Current session:", sessionData, "Error:", sessionError);
       
-      // Check storage persistence
       try {
         await AsyncStorage.setItem("test-key", "test-value");
         const value = await AsyncStorage.getItem("test-key");
@@ -128,7 +129,12 @@ export default function LoginScreen() {
   }, []);
 
   return (
-    <ThemedView style={styles.container}>
+    // Forcing light background by passing the same light color to both lightColor and darkColor props
+    <ThemedView 
+      style={styles.container} 
+      lightColor={theme.colors.background.default} 
+      darkColor={theme.colors.background.default} // Ensures light background even in system dark mode
+    >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoidingView}
@@ -220,16 +226,19 @@ export default function LoginScreen() {
               </TouchableOpacity>
             )}
             
-            <TouchableOpacity
-              style={styles.googleButton}
-              onPress={handleGoogleSignIn}
-              disabled={loading}
-            >
-              <View style={styles.googleIconContainer}>
-                <Text style={styles.googleIcon}>G</Text>
-              </View>
-              <Text style={styles.googleButtonText}>Continue with Google</Text>
-            </TouchableOpacity>
+            {/* Conditionally render Google Sign-In button */}
+            {Platform.OS !== 'ios' && (
+              <TouchableOpacity
+                style={styles.googleButton}
+                onPress={handleGoogleSignIn}
+                disabled={loading}
+              >
+                <View style={styles.googleIconContainer}>
+                  <Text style={styles.googleIcon}>G</Text>
+                </View>
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              </TouchableOpacity>
+            )}
           </Animated.View>
           
           <Animated.View
@@ -252,7 +261,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    // backgroundColor is now handled by ThemedView's lightColor and darkColor props
   },
   keyboardAvoidingView: {
     flex: 1,
@@ -271,7 +280,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: "#F2F7F2", // Very light green
+    backgroundColor: "#F2F7F2", 
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 16,
@@ -279,13 +288,13 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 28,
     fontWeight: "600",
-    color: "#333",
+    color: "#333", // Light mode color
     marginBottom: 8,
     textAlign: "center",
   },
   tagline: {
     textAlign: "center",
-    color: "#666",
+    color: "#666", // Light mode color
     fontSize: 16,
   },
   formContainer: {
@@ -299,20 +308,16 @@ const styles = StyleSheet.create({
     height: 50,
     width: "100%",
     borderBottomWidth: 1,
-    borderBottomColor: "#E0E0E0",
+    borderBottomColor: "#E0E0E0", // Light mode color
     fontSize: 16,
-    color: "#333",
-  },
-  forgotPasswordLink: {
-    alignSelf: "flex-end",
-    marginBottom: 24,
+    color: "#333", // Light mode color
   },
   forgotPasswordText: {
-    color: "#2E7D32", // Green
+    color: "#2E7D32", 
     fontSize: 16,
   },
   signInButton: {
-    backgroundColor: "#2E7D32", // Green
+    backgroundColor: "#2E7D32", 
     height: 50,
     borderRadius: 10,
     justifyContent: "center",
@@ -334,11 +339,11 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: "#E0E0E0",
+    backgroundColor: "#E0E0E0", // Light mode color
   },
   dividerText: {
     marginHorizontal: 10,
-    color: "#666",
+    color: "#666", // Light mode color
     fontSize: 16,
   },
   socialButtonsContainer: {
@@ -367,7 +372,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E0E0E0",
+    borderColor: "#E0E0E0", // Light mode color
   },
   googleIconContainer: {
     width: 20,
@@ -376,29 +381,34 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   googleIcon: {
-    color: "#EA4335", // Google red
+    color: "#EA4335", 
     fontSize: 18,
     fontWeight: "bold",
   },
   googleButtonText: {
-    color: "#333333",
+    color: "#333333", // Light mode color
     fontSize: 16,
     fontWeight: "500",
     marginLeft: 8,
+  },
+  footerText: {
+    fontSize: 16,
+    color: "#666", // Light mode color
+  },
+  createAccountText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#2E7D32", 
+    marginLeft: 5,
+  },
+  // Styles that were already light-mode specific or neutral:
+  forgotPasswordLink: {
+    alignSelf: "flex-end",
+    marginBottom: 24,
   },
   footer: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-  },
-  footerText: {
-    fontSize: 16,
-    color: "#666",
-  },
-  createAccountText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#2E7D32", // Green
-    marginLeft: 5,
   },
 });
