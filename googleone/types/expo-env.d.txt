@@ -1,0 +1,7 @@
+declare module 'expo-constants' {
+    interface ExpoConfig {
+      extra: {
+        OPENAI_API_KEY: string;
+      };
+    }
+  }
